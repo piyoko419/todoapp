@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 body {
-  background: #0d0d0d;
-  color: #e8e8e8;
+  background: #f0f4ff;
+  color: #2d2d3a;
   font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP",
     sans-serif;
   -webkit-font-smoothing: antialiased;

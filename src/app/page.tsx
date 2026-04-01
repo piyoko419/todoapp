@@ -28,10 +28,34 @@ type Todo = {
   dueDate: DueDate;
 };
 
-const SECTIONS: { key: DueDate; label: string; accent: string }[] = [
-  { key: "today", label: "今日", accent: "text-violet-400" },
-  { key: "tomorrow", label: "明日", accent: "text-sky-400" },
-  { key: "later", label: "それ以降", accent: "text-emerald-400" },
+const SECTIONS: {
+  key: DueDate;
+  label: string;
+  accent: string;
+  badge: string;
+  dot: string;
+}[] = [
+  {
+    key: "today",
+    label: "今日",
+    accent: "text-violet-500",
+    badge: "bg-violet-100 text-violet-600 border-violet-200",
+    dot: "bg-violet-400",
+  },
+  {
+    key: "tomorrow",
+    label: "明日",
+    accent: "text-sky-500",
+    badge: "bg-sky-100 text-sky-600 border-sky-200",
+    dot: "bg-sky-400",
+  },
+  {
+    key: "later",
+    label: "それ以降",
+    accent: "text-emerald-500",
+    badge: "bg-emerald-100 text-emerald-600 border-emerald-200",
+    dot: "bg-emerald-400",
+  },
 ];
 
 function SortableTaskItem({
@@ -73,17 +97,17 @@ function SortableTaskItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+      className={`group flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all ${
         isDragging
-          ? "bg-[#252525] border-[#3a3a3a] shadow-xl shadow-black/50 z-50"
-          : "bg-[#181818] border-[#232323] hover:border-[#2e2e2e]"
+          ? "bg-white border-violet-200 shadow-lg shadow-violet-100"
+          : "bg-white border-slate-100 hover:border-violet-200 hover:shadow-sm"
       }`}
     >
       {/* ドラッグハンドル */}
       <button
         {...attributes}
         {...listeners}
-        className="flex-shrink-0 text-[#2e2e2e] hover:text-[#555] cursor-grab active:cursor-grabbing touch-none transition-colors"
+        className="flex-shrink-0 text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing touch-none transition-colors"
         aria-label="並び替え"
       >
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
@@ -101,8 +125,8 @@ function SortableTaskItem({
         onClick={onToggle}
         className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
           todo.completed
-            ? "bg-violet-500 border-violet-500"
-            : "border-[#3a3a3a] hover:border-violet-400"
+            ? "bg-violet-400 border-violet-400"
+            : "border-slate-200 hover:border-violet-300"
         }`}
         aria-label={todo.completed ? "未完了に戻す" : "完了にする"}
       >
@@ -137,7 +161,7 @@ function SortableTaskItem({
               setIsEditing(false);
             }
           }}
-          className="flex-1 bg-[#222] text-[#e8e8e8] text-sm px-2 py-1 rounded-lg outline-none border border-violet-500/60 focus:border-violet-400"
+          className="flex-1 bg-violet-50 text-slate-700 text-sm px-2 py-1 rounded-lg outline-none border border-violet-300"
         />
       ) : (
         <span
@@ -145,8 +169,8 @@ function SortableTaskItem({
           title={todo.completed ? undefined : "クリックして編集"}
           className={`flex-1 text-sm leading-relaxed transition-colors ${
             todo.completed
-              ? "line-through text-[#444] cursor-default"
-              : "text-[#d4d4d4] cursor-pointer hover:text-white"
+              ? "line-through text-slate-300 cursor-default"
+              : "text-slate-600 cursor-pointer hover:text-slate-900"
           }`}
         >
           {todo.text}
@@ -156,7 +180,7 @@ function SortableTaskItem({
       {/* 削除 */}
       <button
         onClick={onDelete}
-        className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-[#3a3a3a] hover:text-red-400 hover:bg-red-400/10 transition-all"
+        className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-slate-200 hover:text-red-400 hover:bg-red-50 transition-all"
         aria-label="削除"
       >
         <svg
@@ -237,13 +261,13 @@ export default function Home() {
   const activeCount = todos.filter((t) => !t.completed).length;
 
   return (
-    <main className="min-h-screen bg-[#0d0d0d] px-4 py-12 flex flex-col items-center">
+    <main className="min-h-screen bg-gradient-to-br from-violet-50 via-sky-50 to-emerald-50 px-4 py-12 flex flex-col items-center">
       {/* ヘッダー */}
       <div className="w-full max-w-lg mb-8">
-        <h1 className="text-3xl font-bold text-white tracking-tight">
+        <h1 className="text-3xl font-bold text-slate-700 tracking-tight">
           やること
         </h1>
-        <p className="text-[#444] text-sm mt-1">
+        <p className="text-slate-400 text-sm mt-1">
           {activeCount > 0
             ? `${activeCount} 件の未完了タスク`
             : todos.length === 0
@@ -253,17 +277,17 @@ export default function Home() {
       </div>
 
       {/* 入力エリア */}
-      <div className="w-full max-w-lg mb-10 bg-[#141414] border border-[#1e1e1e] rounded-2xl p-4">
+      <div className="w-full max-w-lg mb-10 bg-white/70 backdrop-blur-sm border border-white rounded-3xl p-5 shadow-sm shadow-violet-100">
         {/* セクション選択 */}
         <div className="flex gap-2 mb-3">
-          {SECTIONS.map(({ key, label }) => (
+          {SECTIONS.map(({ key, label, badge }) => (
             <button
               key={key}
               onClick={() => setSelectedDue(key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                 selectedDue === key
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-900/30"
-                  : "bg-[#1e1e1e] text-[#555] hover:text-[#aaa] border border-[#2a2a2a]"
+                  ? badge + " shadow-sm"
+                  : "bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-200"
               }`}
             >
               {label}
@@ -281,12 +305,12 @@ export default function Home() {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) addTodo();
             }}
             placeholder="新しいタスクを入力..."
-            className="flex-1 px-4 py-2.5 rounded-xl bg-[#0d0d0d] border border-[#252525] text-[#e8e8e8] placeholder-[#333] text-sm focus:outline-none focus:border-violet-600/60 transition"
+            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 placeholder-slate-300 text-sm focus:outline-none focus:border-violet-300 focus:bg-white transition"
           />
           <button
             onClick={addTodo}
             disabled={!inputValue.trim()}
-            className="px-5 py-2.5 rounded-xl bg-violet-600 text-white text-sm font-medium hover:bg-violet-500 active:scale-95 disabled:opacity-20 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-900/20"
+            className="px-5 py-2.5 rounded-xl bg-violet-400 text-white text-sm font-medium hover:bg-violet-500 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm shadow-violet-200"
           >
             追加
           </button>
@@ -300,7 +324,7 @@ export default function Home() {
         onDragEnd={handleDragEnd}
       >
         <div className="w-full max-w-lg space-y-8">
-          {SECTIONS.map(({ key, label, accent }) => {
+          {SECTIONS.map(({ key, label, accent, dot }) => {
             const sectionTodos = todos.filter((t) => t.dueDate === key);
             const sectionActive = sectionTodos.filter(
               (t) => !t.completed
@@ -309,22 +333,21 @@ export default function Home() {
             return (
               <section key={key}>
                 {/* セクションヘッダー */}
-                <div className="flex items-center gap-3 mb-3">
-                  <span
-                    className={`text-xs font-bold uppercase tracking-widest ${accent}`}
-                  >
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`w-2 h-2 rounded-full ${dot}`} />
+                  <span className={`text-xs font-bold tracking-widest uppercase ${accent}`}>
                     {label}
                   </span>
-                  <div className="flex-1 h-px bg-[#1a1a1a]" />
+                  <div className="flex-1 h-px bg-white/80" />
                   {sectionTodos.length > 0 && (
-                    <span className="text-xs text-[#333]">
+                    <span className="text-xs text-slate-300">
                       {sectionActive}/{sectionTodos.length}
                     </span>
                   )}
                 </div>
 
                 {sectionTodos.length === 0 ? (
-                  <p className="text-center text-[#2a2a2a] text-sm py-3">
+                  <p className="text-center text-slate-300 text-sm py-3">
                     タスクなし
                   </p>
                 ) : (
@@ -353,7 +376,7 @@ export default function Home() {
 
       {/* 空状態 */}
       {todos.length === 0 && (
-        <div className="mt-20 text-center text-[#222]">
+        <div className="mt-20 text-center text-slate-300">
           <div className="text-5xl mb-4">✓</div>
           <p className="text-sm">タスクを追加して今日を整理しよう</p>
         </div>
