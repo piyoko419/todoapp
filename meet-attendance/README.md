@@ -43,6 +43,10 @@ Google Meet は会議ごとに「誰が・いつ入室し・いつ退出した�
   すべてこのアカウントで行ってください。
 - 別のアカウントで作成した Meet リンクの参加者記録は取得できません。
 
+プログラム用の Meet リンク: **https://meet.google.com/ust-ndqc-kwk**
+(会議コード `ust-ndqc-kwk` を `Code.gs` の `MEETING_CODES` に設定済み。
+この会議の参加記録だけが集計されます。リンクを作り直した場合は設定も更新してください)
+
 ## セットアップ手順(約10分・初回のみ)
 
 1. [Google スプレッドシート](https://sheets.new) を新規作成し、名前を付ける(例: `Meet出席管理`)
@@ -71,14 +75,14 @@ Google Meet は会議ごとに「誰が・いつ入室し・いつ退出した�
 
 ```js
 const CONFIG = {
-  LOOKBACK_DAYS: 90,   // 初回同期で遡る日数
-  MEETING_CODES: [],   // 特定の会議だけ集計する場合: ['abc-mnop-xyz']
-  MIN_MINUTES: 0,      // 例: 10 にすると10分未満の滞在は出席にカウントしない
+  LOOKBACK_DAYS: 90,                  // 初回同期で遡る日数
+  MEETING_CODES: ['ust-ndqc-kwk'],    // 集計対象の会議コード。[] にすると主催した全会議が対象
+  MIN_MINUTES: 0,                     // 例: 10 にすると10分未満の滞在は出席にカウントしない
 };
 ```
 
-プログラム以外の会議も同じアカウントで主催している場合は、`MEETING_CODES` に
-プログラム用の会議コード(Meet の URL 末尾 `abc-mnop-xyz` の部分)を設定して絞り込んでください。
+会議コードは Meet の URL 末尾(`https://meet.google.com/ust-ndqc-kwk` の `ust-ndqc-kwk`)です。
+別の会議も集計したい場合は `MEETING_CODES` に追加してください。
 
 ## 注意点・制限事項
 

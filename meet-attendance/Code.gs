@@ -17,8 +17,9 @@ const CONFIG = {
   // 初回同期で何日前まで遡って取得するか
   LOOKBACK_DAYS: 90,
 
-  // 集計対象の会議コード(例: ['abc-mnop-xyz'])。空配列なら自分が主催した全会議が対象
-  MEETING_CODES: [],
+  // 集計対象の会議コード。空配列 [] にすると自分が主催した全会議が対象
+  // プログラム用リンク: https://meet.google.com/ust-ndqc-kwk
+  MEETING_CODES: ['ust-ndqc-kwk'],
 
   // この分数未満の滞在は出席とみなさない(0 なら全員カウント)
   MIN_MINUTES: 0,
