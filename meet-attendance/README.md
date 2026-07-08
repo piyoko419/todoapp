@@ -84,7 +84,9 @@ https://docs.google.com/spreadsheets/d/1QjnEneVTFbG2cdrIZwZyc7Q_pLxFZMH-fltpUpFa
    出るので、会議を主催しているアカウントで **許可** する
    (「このアプリは Google で確認されていません」と出た場合は「詳細」→「(プロジェクト名)に移動」)
 8. 実行が終わるとシートに過去90日分の参加記録と集計が入ります
-9. 最後に関数 `setupDailyTrigger` を一度実行 → **毎朝6時台に自動同期**されるようになります
+9. 最後に関数 `setupDailyTrigger` を一度実行 → **毎日15時台に自動同期**されるようになります
+   (時刻は `Code.gs` の `CONFIG.TRIGGER_HOUR` で変更できます。変更後は
+   `setupDailyTrigger` を再実行してください)
 
 以降は何もしなくても、スプレッドシートを開けば最新の出席状況と月次集計が見られます。
 

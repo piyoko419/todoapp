@@ -23,6 +23,9 @@ const CONFIG = {
 
   // この分数未満の滞在は出席とみなさない(0 なら全員カウント)
   MIN_MINUTES: 0,
+
+  // 毎日の自動同期を実行する時刻(0〜23)。15 なら15時台に実行される
+  TRIGGER_HOUR: 15,
 };
 // ======================
 
@@ -102,7 +105,7 @@ function rebuildReports() {
   buildParticipantMaster_(ss, rows);
 }
 
-/** 毎朝6〜7時に syncAttendance を実行するトリガーを設定(重複作成はしない) */
+/** 毎日 CONFIG.TRIGGER_HOUR 時台に syncAttendance を実行するトリガーを設定(既存の設定は置き換える) */
 function setupDailyTrigger() {
   ScriptApp.getProjectTriggers()
     .filter(function (t) { return t.getHandlerFunction() === 'syncAttendance'; })
@@ -110,9 +113,9 @@ function setupDailyTrigger() {
   ScriptApp.newTrigger('syncAttendance')
     .timeBased()
     .everyDays(1)
-    .atHour(6)
+    .atHour(CONFIG.TRIGGER_HOUR)
     .create();
-  toast_('毎日朝6時台に自動同期するよう設定しました。');
+  toast_('毎日' + CONFIG.TRIGGER_HOUR + '時台に自動同期するよう設定しました。');
 }
 
 // ======== 内部処理 ========
