@@ -92,6 +92,39 @@ const CONFIG = {
 会議コードは Meet の URL 末尾(`https://meet.google.com/ust-ndqc-kwk` の `ust-ndqc-kwk`)です。
 別の会議も集計したい場合は `MEETING_CODES` に追加してください。
 
+## トラブルシューティング
+
+### 実行時に「Meet API へのアクセスが許可されていません (HTTP 403)」と出る
+
+スクリプトに紐づく Google Cloud プロジェクトで Meet API が有効化されていません。
+`appsscript.json` の `dependencies` に以下が入っているか確認してください
+(入っていれば保存時に自動で有効化されます):
+
+```json
+"dependencies": {
+  "enabledAdvancedServices": [
+    { "userSymbol": "Meet", "version": "v2", "serviceId": "meet" }
+  ]
+}
+```
+
+それでも解決しない場合(またはマニフェスト保存時にエラーになる場合)は、
+標準の Google Cloud プロジェクトを作成して紐づけます:
+
+1. https://console.cloud.google.com に運用アカウントでログイン → 新しいプロジェクトを作成
+2. 「APIとサービス」→「ライブラリ」→ **Google Meet API** を検索 → **有効にする**
+3. 「APIとサービス」→「OAuth 同意画面」→ User Type: **外部** → アプリ名・メールを入力して作成
+   → 「テストユーザー」に運用アカウントのメールアドレスを追加
+4. 「IAMと管理」→「設定」で **プロジェクト番号** をコピー
+5. Apps Script の「プロジェクトの設定」→「Google Cloud Platform(GCP)プロジェクト」
+   → **プロジェクトを変更** → プロジェクト番号を貼り付けて設定
+6. `syncAttendance` を再実行し、再度承認する
+
+### 貼り付け後に「SyntaxError: Unexpected end of input」と出る
+
+コードが途中までしか貼り付けられていません。GitHub の「Raw」ボタンで開いてから
+全選択コピーし、`コード.gs` を全削除してから貼り直してください。
+
 ## 注意点・制限事項
 
 - **参加者の識別**: Google アカウントでログインして参加した人はアカウントIDで確実に
