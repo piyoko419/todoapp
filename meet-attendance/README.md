@@ -64,6 +64,10 @@ https://docs.google.com/spreadsheets/d/1QjnEneVTFbG2cdrIZwZyc7Q_pLxFZMH-fltpUpFa
 6. **Google Cloud プロジェクトを作成して Meet API を有効化する**(初回のみ・無料):
    1. https://console.cloud.google.com に運用アカウントでログイン
       (初回は利用規約への同意画面が出ます。請求先・クレジットカードの登録は不要です)
+      ※ Google Cloud の利用には Google アカウントの **2段階認証(MFA)** の設定が必須です
+      (2026年4月〜)。「Google Cloud へのアクセスがブロックされました」と出た場合は、
+      画面の「MFA を有効にする」から2段階認証を設定 → 1分ほど待ってページを再読み込み
+      してください。
    2. 画面上部のプロジェクト選択 → **「新しいプロジェクト」** → 名前(例: `meet-attendance`)を
       付けて **作成** し、作成したプロジェクトを選択する
    3. メニュー **「APIとサービス」→「ライブラリ」** → `Google Meet API` を検索 → **「有効にする」**
