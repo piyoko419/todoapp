@@ -43,6 +43,9 @@ Google Meet は会議ごとに「誰が・いつ入室し・いつ退出した�
   すべてこのアカウントで行ってください。
 - 別のアカウントで作成した Meet リンクの参加者記録は取得できません。
 
+出席管理スプレッドシート:
+https://docs.google.com/spreadsheets/d/1QjnEneVTFbG2cdrIZwZyc7Q_pLxFZMH-fltpUpFa-24/edit
+
 プログラム用の Meet リンク: **https://meet.google.com/ust-ndqc-kwk**
 (会議コード `ust-ndqc-kwk` を `Code.gs` の `MEETING_CODES` に設定済み。
 この会議の参加記録だけが集計されます。リンクを作り直した場合は設定も更新してください)
