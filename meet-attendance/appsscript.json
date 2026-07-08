@@ -1,14 +1,6 @@
 {
   "timeZone": "Asia/Tokyo",
-  "dependencies": {
-    "enabledAdvancedServices": [
-      {
-        "userSymbol": "Meet",
-        "version": "v2",
-        "serviceId": "meet"
-      }
-    ]
-  },
+  "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "oauthScopes": [
