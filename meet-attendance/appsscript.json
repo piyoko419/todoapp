@@ -1,14 +1,13 @@
 {
   "timeZone": "Asia/Tokyo",
-  "dependencies": {
-    "enabledAdvancedServices": [
-      {
-        "userSymbol": "Meet",
-        "version": "v2",
-        "serviceId": "meet"
-      }
-    ]
-  },
+  "dependencies": {},
   "exceptionLogging": "STACKDRIVER",
-  "runtimeVersion": "V8"
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/meetings.space.readonly",
+    "https://www.googleapis.com/auth/spreadsheets.currentonly",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/script.container.ui"
+  ]
 }

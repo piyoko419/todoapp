@@ -42,7 +42,6 @@ function onOpen() {
  * 毎日のトリガーからもメニューからも呼ばれる。
  */
 function syncAttendance() {
-  assertMeetService_();
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const tz = ss.getSpreadsheetTimeZone();
   const logSheet = getOrCreateLogSheet_(ss);
@@ -55,11 +54,9 @@ function syncAttendance() {
   let skippedOngoing = 0;
   let pageToken;
   do {
-    const resp = Meet.ConferenceRecords.list({
-      filter: filter,
-      pageSize: 100,
-      pageToken: pageToken,
-    });
+    let query = 'pageSize=100&filter=' + encodeURIComponent(filter);
+    if (pageToken) query += '&pageToken=' + encodeURIComponent(pageToken);
+    const resp = meetApiGet_('conferenceRecords?' + query);
     const records = resp.conferenceRecords || [];
     for (const rec of records) {
       if (knownRecords.has(rec.name)) continue; // 取得済み
@@ -131,10 +128,9 @@ function buildParticipantRows_(rec, meetingCode, tz) {
   const byKey = {};
   let pageToken;
   do {
-    const resp = Meet.ConferenceRecords.Participants.list(rec.name, {
-      pageSize: 250,
-      pageToken: pageToken,
-    });
+    let query = 'pageSize=250';
+    if (pageToken) query += '&pageToken=' + encodeURIComponent(pageToken);
+    const resp = meetApiGet_(rec.name + '/participants?' + query);
     const participants = resp.participants || [];
     for (const p of participants) {
       const id = participantIdentity_(p);
@@ -299,7 +295,7 @@ function getMeetingCode_(spaceName) {
   if (spaceCodeCache_[spaceName]) return spaceCodeCache_[spaceName];
   let code = spaceName;
   try {
-    const space = Meet.Spaces.get(spaceName);
+    const space = meetApiGet_(spaceName);
     if (space && space.meetingCode) code = space.meetingCode;
   } catch (e) {
     // アクセスできないスペースはIDのまま扱う
@@ -350,13 +346,28 @@ function resetSheet_(ss, name, headers) {
   return sheet;
 }
 
-function assertMeetService_() {
-  if (typeof Meet === 'undefined') {
+/**
+ * Google Meet REST API を呼び出す。
+ * 必要な権限スコープは appsscript.json(マニフェスト)で宣言している。
+ */
+function meetApiGet_(pathAndQuery) {
+  const resp = UrlFetchApp.fetch('https://meet.googleapis.com/v2/' + pathAndQuery, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true,
+  });
+  const code = resp.getResponseCode();
+  if (code === 401 || code === 403) {
     throw new Error(
-      'Google Meet API サービスが有効になっていません。' +
-      'Apps Script エディタ左側の「サービス +」から「Google Meet API」(v2) を追加してください。'
+      'Meet API へのアクセスが許可されていません (HTTP ' + code + ')。' +
+      'appsscript.json に meetings.space.readonly スコープが設定されているか、' +
+      '会議の主催者アカウントで承認したかを確認してください。詳細: ' +
+      resp.getContentText()
     );
   }
+  if (code !== 200) {
+    throw new Error('Meet API エラー (HTTP ' + code + '): ' + resp.getContentText());
+  }
+  return JSON.parse(resp.getContentText());
 }
 
 function toast_(msg) {
