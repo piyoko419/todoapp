@@ -13,6 +13,7 @@ const CONFIG = {
   LOG_SHEET: '参加ログ',
   SUMMARY_SHEET: '月次サマリー',
   MASTER_SHEET: '参加者マスタ',
+  MAP_SHEET: '名前対応表',
 
   // 初回同期で何日前まで遡って取得するか
   LOOKBACK_DAYS: 90,
@@ -101,8 +102,18 @@ function rebuildReports() {
     .getRange(2, 1, logSheet.getLastRow() - 1, LOG_HEADERS.length)
     .getValues();
 
-  buildMonthlySummary_(ss, rows);
-  buildParticipantMaster_(ss, rows);
+  // 名前対応表を最新化し、本名が入力済みの参加者は名前を置き換える
+  const nameMap = updateNameMapping_(ss, rows);
+  rows.forEach(function (r) {
+    const real = nameMap[String(r[7])];
+    if (real) r[3] = real;
+  });
+  logSheet
+    .getRange(2, 4, rows.length, 1)
+    .setValues(rows.map(function (r) { return [r[3]]; }));
+
+  buildMonthlySummary_(ss, rows, nameMap);
+  buildParticipantMaster_(ss, rows, nameMap);
 }
 
 /** 毎日 CONFIG.TRIGGER_HOUR 時台に syncAttendance を実行するトリガーを設定(既存の設定は置き換える) */
@@ -197,14 +208,14 @@ function participantIdentity_(p) {
 }
 
 /** 月次サマリーシートを再生成する */
-function buildMonthlySummary_(ss, rows) {
+function buildMonthlySummary_(ss, rows, nameMap) {
   // 参加者ごとの初参加月(新規/リピーター判定用)
-  const firstMonthByKey = {};
+  const firstMonthById = {};
   for (const r of rows) {
     const month = String(r[1]);
-    const key = String(r[7]);
-    if (!firstMonthByKey[key] || month < firstMonthByKey[key]) {
-      firstMonthByKey[key] = month;
+    const id = canonicalId_(r, nameMap);
+    if (!firstMonthById[id] || month < firstMonthById[id]) {
+      firstMonthById[id] = month;
     }
   }
 
@@ -212,15 +223,15 @@ function buildMonthlySummary_(ss, rows) {
   const byMonth = {};
   for (const r of rows) {
     const month = String(r[1]);
-    const key = String(r[7]);
+    const id = canonicalId_(r, nameMap);
     const recordId = String(r[8]);
     if (!byMonth[month]) {
-      byMonth[month] = { records: {}, keys: {}, attendances: 0 };
+      byMonth[month] = { records: {}, ids: {}, attendances: {} };
     }
     const m = byMonth[month];
     m.records[recordId] = true;
-    m.keys[key] = true;
-    m.attendances++;
+    m.ids[id] = true;
+    m.attendances[recordId + '|' + id] = true; // 同一人物の重複入室は1回と数える
   }
 
   const months = Object.keys(byMonth).sort();
@@ -228,20 +239,21 @@ function buildMonthlySummary_(ss, rows) {
   for (const month of months) {
     const m = byMonth[month];
     const sessionCount = Object.keys(m.records).length;
-    const uniqueKeys = Object.keys(m.keys);
-    const newcomers = uniqueKeys.filter(function (k) {
-      return firstMonthByKey[k] === month;
+    const uniqueIds = Object.keys(m.ids);
+    const attendances = Object.keys(m.attendances).length;
+    const newcomers = uniqueIds.filter(function (id) {
+      return firstMonthById[id] === month;
     }).length;
-    const repeaters = uniqueKeys.length - newcomers;
+    const repeaters = uniqueIds.length - newcomers;
     out.push([
       month,
       sessionCount,
-      m.attendances,
-      uniqueKeys.length,
+      attendances,
+      uniqueIds.length,
       newcomers,
       repeaters,
-      uniqueKeys.length > 0 ? repeaters / uniqueKeys.length : 0,
-      sessionCount > 0 ? Math.round((m.attendances / sessionCount) * 10) / 10 : 0,
+      uniqueIds.length > 0 ? repeaters / uniqueIds.length : 0,
+      sessionCount > 0 ? Math.round((attendances / sessionCount) * 10) / 10 : 0,
     ]);
   }
 
@@ -257,30 +269,40 @@ function buildMonthlySummary_(ss, rows) {
 }
 
 /** 参加者マスタシートを再生成する */
-function buildParticipantMaster_(ss, rows) {
-  const byKey = {};
+function buildParticipantMaster_(ss, rows, nameMap) {
+  const byId = {};
   for (const r of rows) {
     const date = String(r[0]);
     const month = String(r[1]);
     const name = String(r[3]);
     const key = String(r[7]);
-    if (!byKey[key]) {
-      byKey[key] = { name: name, first: date, last: date, count: 0, months: {} };
+    const recordId = String(r[8]);
+    const id = canonicalId_(r, nameMap);
+    if (!byId[id]) {
+      byId[id] = { name: name, first: date, last: date, records: {}, months: {}, keys: {} };
     }
-    const e = byKey[key];
-    e.count++;
+    const e = byId[id];
+    e.records[recordId] = true;
     e.months[month] = true;
+    e.keys[key] = true;
     if (date < e.first) e.first = date;
     if (date >= e.last) {
       e.last = date;
-      e.name = name; // 最新の表示名を採用
+      e.name = name; // 最新の名前を採用
     }
   }
 
-  const out = Object.keys(byKey)
-    .map(function (key) {
-      const e = byKey[key];
-      return [e.name, e.first, e.last, e.count, Object.keys(e.months).length, key];
+  const out = Object.keys(byId)
+    .map(function (id) {
+      const e = byId[id];
+      return [
+        e.name,
+        e.first,
+        e.last,
+        Object.keys(e.records).length,
+        Object.keys(e.months).length,
+        Object.keys(e.keys).join(', '),
+      ];
     })
     .sort(function (a, b) { return b[3] - a[3]; }); // 参加回数の多い順
 
@@ -289,6 +311,57 @@ function buildParticipantMaster_(ss, rows) {
   if (out.length > 0) {
     sheet.getRange(2, 1, out.length, headers.length).setValues(out);
   }
+}
+
+const MAP_HEADERS = ['参加者キー', 'Meetでの表示名', '正式な名前(ここに入力)'];
+
+/**
+ * 名前対応表シートを最新化して、参加者キー → 本名 の対応を返す。
+ * ログに現れた未登録の参加者は自動でシートに追加される(本名欄は空)。
+ * 本名欄が空の参加者は Meet の表示名のまま扱われる。
+ */
+function updateNameMapping_(ss, rows) {
+  let sheet = ss.getSheetByName(CONFIG.MAP_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CONFIG.MAP_SHEET);
+    sheet.getRange(1, 1, 1, MAP_HEADERS.length).setValues([MAP_HEADERS]);
+    sheet.getRange(1, 1, 1, MAP_HEADERS.length).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+
+  const map = {};
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const vals = sheet.getRange(2, 1, lastRow - 1, MAP_HEADERS.length).getValues();
+    for (const v of vals) {
+      if (v[0]) map[String(v[0])] = String(v[2]).trim();
+    }
+  }
+
+  const toAppend = [];
+  for (const r of rows) {
+    const key = String(r[7]);
+    if (!(key in map)) {
+      map[key] = '';
+      toAppend.push([key, String(r[3]), '']);
+    }
+  }
+  if (toAppend.length > 0) {
+    sheet
+      .getRange(sheet.getLastRow() + 1, 1, toAppend.length, MAP_HEADERS.length)
+      .setValues(toAppend);
+  }
+  return map;
+}
+
+/**
+ * 集計上の同一人物判定に使うID。
+ * 名前対応表で本名が入力されていれば本名で統合する(表示名が毎回違う人の対策)。
+ */
+function canonicalId_(row, nameMap) {
+  const key = String(row[7]);
+  const real = nameMap ? nameMap[key] : '';
+  return real ? '本名:' + real : key;
 }
 
 /** 会議スペースIDから会議コード(abc-mnop-xyz 形式)を取得。取得できなければスペースIDを返す */
