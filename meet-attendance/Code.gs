@@ -46,6 +46,21 @@ function onOpen() {
  * 毎日のトリガーからもメニューからも呼ばれる。
  */
 function syncAttendance() {
+  // 同時実行防止: 手動実行の連打や自動実行との重なりで同じ会議が
+  // 二重に取り込まれるのを防ぐ
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(0)) {
+    toast_('同期は既に実行中のため、この実行はスキップしました。');
+    return;
+  }
+  try {
+    syncAttendanceLocked_();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function syncAttendanceLocked_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const tz = ss.getSpreadsheetTimeZone();
   const logSheet = getOrCreateLogSheet_(ss);
@@ -98,9 +113,20 @@ function rebuildReports() {
     toast_('参加ログがまだ空です。先に「今すぐ同期」を実行してください。');
     return;
   }
-  const rows = logSheet
+  let rows = logSheet
     .getRange(2, 1, logSheet.getLastRow() - 1, LOG_HEADERS.length)
     .getValues();
+
+  // 過去に二重取り込みされた行があれば自動で削除する
+  const deduped = dedupeRows_(rows);
+  if (deduped.length !== rows.length) {
+    logSheet.getRange(2, 1, rows.length, LOG_HEADERS.length).clearContent();
+    logSheet
+      .getRange(2, 1, deduped.length, LOG_HEADERS.length)
+      .setValues(deduped);
+    Logger.log('重複していた ' + (rows.length - deduped.length) + ' 行を削除しました。');
+    rows = deduped;
+  }
 
   // 名前対応表を最新化し、本名が入力済みの参加者は名前を置き換える
   const nameMap = updateNameMapping_(ss, rows);
@@ -311,6 +337,20 @@ function buildParticipantMaster_(ss, rows, nameMap) {
   if (out.length > 0) {
     sheet.getRange(2, 1, out.length, headers.length).setValues(out);
   }
+}
+
+/**
+ * 参加ログの重複行(同じ会議 × 同じ参加者)を取り除く。最初の1行だけ残す。
+ * 同時実行などで二重取り込みされた過去データの自動修復に使う。
+ */
+function dedupeRows_(rows) {
+  const seen = {};
+  return rows.filter(function (r) {
+    const id = String(r[8]) + '|' + String(r[7]); // 会議レコードID + 参加者キー
+    if (seen[id]) return false;
+    seen[id] = true;
+    return true;
+  });
 }
 
 const MAP_HEADERS = ['参加者キー', 'Meetでの表示名', '正式な名前(ここに入力)'];
