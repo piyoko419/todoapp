@@ -170,7 +170,7 @@ function createReportDraft() {
 
   const html = HtmlService.createHtmlOutput(
     '<div style="font-family:sans-serif;">' +
-    '<p style="margin:0 0 6px;">内容・資料URLの欄を埋めてChatworkに貼り付けてください。</p>' +
+    '<p style="margin:0 0 6px;">時間・内容・資料URLの欄を埋めてChatworkに貼り付けてください。</p>' +
     '<textarea id="t" style="width:100%;height:330px;box-sizing:border-box;">' +
     escapeHtml_(text) +
     '</textarea><br>' +
@@ -187,11 +187,6 @@ function buildReportText_(rows, tz) {
   const dateOf = function (v) {
     return v instanceof Date ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : String(v);
   };
-  const hmOf = function (v) {
-    if (v instanceof Date) return Utilities.formatDate(v, tz, 'HH:mm');
-    const m = String(v).match(/(\d{1,2}:\d{2})\s*$/);
-    return m ? m[1] : '';
-  };
 
   // 最新の開催日の行だけを対象にする(除外リストの名前は除く)
   const latest = rows.map(function (r) { return dateOf(r[0]); }).sort().pop();
@@ -203,26 +198,22 @@ function buildReportText_(rows, tz) {
   // 同一人物の重複を除いて参加者リストを作る
   const seen = {};
   const people = [];
-  let startMin = '';
-  let endMax = '';
   for (const r of dayRows) {
     const key = String(r[7]);
     if (seen[key]) continue;
     seen[key] = true;
     people.push(String(r[3]));
-    const s = hmOf(r[4]);
-    const e = hmOf(r[5]);
-    if (s && (!startMin || s < startMin)) startMin = s;
-    if (e && (!endMax || e > endMax)) endMax = e;
   }
 
-  // 「名前(拠点)」の形式から拠点ごとにグループ化する
+  // 「名前(拠点)」の形式から拠点ごとにグループ化する。
+  // 個人名は拠点部分を取り除いて表示し、事業所PCなどの共用端末はフルネームのまま表示する
   const groups = {};
   const order = [];
   for (const full of people) {
     const m = full.match(/[((]([^))]+)[))]\s*$/);
     const loc = m ? m[1] : '';
-    const bare = m ? full.slice(0, m.index).trim() : full;
+    const keepFull = /事業所PC/.test(full);
+    const bare = keepFull || !m ? full : full.slice(0, m.index).trim();
     if (!groups[loc]) {
       groups[loc] = [];
       order.push(loc);
@@ -236,9 +227,8 @@ function buildReportText_(rows, tz) {
   return (
     CONFIG.REPORT_HEADER + '\n\n' +
     '■プログラム\n' +
-    '日付:' + latest + '\n' +
-    '時間:' + (startMin || '__:__') + '〜' + (endMax || '__:__') + '\n' +
-    '内容:(ここに記入)\n\n' +
+    '時間:\n' +
+    '内容:\n\n' +
     '参加人数:' + people.length + '名\n' +
     memberLines.join('\n') + '\n\n' +
     '★本日の資料(プロンプト)\n(ここにURLを貼る)\n' +
