@@ -93,8 +93,8 @@ function syncAttendanceLocked_() {
     logSheet
       .getRange(logSheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
       .setValues(newRows);
-    sortLog_(logSheet);
   }
+  sortLog_(logSheet);
 
   rebuildReports();
 
@@ -448,7 +448,7 @@ function sortLog_(sheet) {
   if (lastRow < 3) return;
   sheet
     .getRange(2, 1, lastRow - 1, LOG_HEADERS.length)
-    .sort([{ column: 5, ascending: true }]); // 参加開始時刻順
+    .sort([{ column: 5, ascending: false }]); // 参加開始時刻の新しい順(最新が上)
 }
 
 /** シートを作り直してヘッダーだけの状態にする */
