@@ -94,9 +94,8 @@ function syncAttendanceLocked_() {
       .getRange(logSheet.getLastRow() + 1, 1, newRows.length, newRows[0].length)
       .setValues(newRows);
   }
-  sortLog_(logSheet);
 
-  rebuildReports();
+  rebuildReports(); // 並び替えと日付境界の罫線もこの中で行う
 
   const msg =
     '同期完了: ' + newRows.length + ' 件の参加記録を追加しました。' +
@@ -140,6 +139,8 @@ function rebuildReports() {
 
   buildMonthlySummary_(ss, rows, nameMap);
   buildParticipantMaster_(ss, rows, nameMap);
+
+  sortLog_(logSheet);
 }
 
 /** 毎日 CONFIG.TRIGGER_HOUR 時台に syncAttendance を実行するトリガーを設定(既存の設定は置き換える) */
@@ -445,10 +446,33 @@ function getKnownRecordIds_(sheet) {
 
 function sortLog_(sheet) {
   const lastRow = sheet.getLastRow();
-  if (lastRow < 3) return;
+  if (lastRow >= 3) {
+    sheet
+      .getRange(2, 1, lastRow - 1, LOG_HEADERS.length)
+      .sort([{ column: 5, ascending: false }]); // 参加開始時刻の新しい順(最新が上)
+  }
+  applyDateBorders_(sheet);
+}
+
+/** 参加ログで日付が変わる境目の行に太い下罫線を引く */
+function applyDateBorders_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  // いったん既存の罫線を消してから引き直す(並び替えで境目が移動するため)
   sheet
     .getRange(2, 1, lastRow - 1, LOG_HEADERS.length)
-    .sort([{ column: 5, ascending: false }]); // 参加開始時刻の新しい順(最新が上)
+    .setBorder(false, false, false, false, false, false);
+  const dates = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let i = 0; i < dates.length - 1; i++) {
+    if (String(dates[i][0]) !== String(dates[i + 1][0])) {
+      sheet
+        .getRange(2 + i, 1, 1, LOG_HEADERS.length)
+        .setBorder(
+          null, null, true, null, null, null,
+          '#000000', SpreadsheetApp.BorderStyle.SOLID_MEDIUM
+        );
+    }
+  }
 }
 
 /** シートを作り直してヘッダーだけの状態にする */
