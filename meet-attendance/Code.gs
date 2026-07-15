@@ -27,6 +27,14 @@ const CONFIG = {
 
   // 毎日の自動同期を実行する時刻(0〜23)。15 なら15時台に実行される
   TRIGGER_HOUR: 15,
+
+  // ---- Chatwork報告文の設定 ----
+  // 冒頭のあいさつ部分
+  REPORT_HEADER: '【共有】\nノービー記録用です🙇',
+  // アンケートのURL(毎回同じ場合はここに設定。空文字なら「(ここにURLを貼る)」になる)
+  REPORT_SURVEY_URL: 'https://forms.gle/hZmYXmAfiyg82gz56',
+  // 参加人数・名簿から除外する名前(運営アカウントなど)
+  REPORT_EXCLUDE: ['プログラム_スキルアップ工房'],
 };
 // ======================
 
@@ -36,6 +44,7 @@ function onOpen() {
     .createMenu('Meet出席')
     .addItem('今すぐ同期(参加記録を取得)', 'syncAttendance')
     .addItem('集計だけ更新', 'rebuildReports')
+    .addItem('報告文を作成(最新回)', 'createReportDraft')
     .addSeparator()
     .addItem('毎日の自動同期を設定', 'setupDailyTrigger')
     .addToUi();
@@ -141,6 +150,109 @@ function rebuildReports() {
   buildParticipantMaster_(ss, rows, nameMap);
 
   sortLog_(logSheet);
+}
+
+/**
+ * 最新の開催回の出席データから、Chatwork共有用の報告文の下書きを作成して表示する。
+ * 参加者名の「(大阪)」「(東京)」などから拠点別の名簿を自動生成する。
+ */
+function createReportDraft() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const logSheet = ss.getSheetByName(CONFIG.LOG_SHEET);
+  if (!logSheet || logSheet.getLastRow() < 2) {
+    toast_('参加ログがまだ空です。先に「今すぐ同期」を実行してください。');
+    return;
+  }
+  const rows = logSheet
+    .getRange(2, 1, logSheet.getLastRow() - 1, LOG_HEADERS.length)
+    .getValues();
+  const text = buildReportText_(rows, ss.getSpreadsheetTimeZone());
+
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family:sans-serif;">' +
+    '<p style="margin:0 0 6px;">内容・資料URLの欄を埋めてChatworkに貼り付けてください。</p>' +
+    '<textarea id="t" style="width:100%;height:330px;box-sizing:border-box;">' +
+    escapeHtml_(text) +
+    '</textarea><br>' +
+    '<button style="margin-top:8px;padding:6px 16px;" onclick="' +
+    "var t=document.getElementById('t');t.select();document.execCommand('copy');" +
+    "this.textContent='コピーしました!';" +
+    '">全文をコピー</button></div>'
+  ).setWidth(520).setHeight(460);
+  SpreadsheetApp.getUi().showModalDialog(html, '報告文(Chatwork用)');
+}
+
+/** 参加ログの行データから報告文テキストを組み立てる */
+function buildReportText_(rows, tz) {
+  const dateOf = function (v) {
+    return v instanceof Date ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : String(v);
+  };
+  const hmOf = function (v) {
+    if (v instanceof Date) return Utilities.formatDate(v, tz, 'HH:mm');
+    const m = String(v).match(/(\d{1,2}:\d{2})\s*$/);
+    return m ? m[1] : '';
+  };
+
+  // 最新の開催日の行だけを対象にする(除外リストの名前は除く)
+  const latest = rows.map(function (r) { return dateOf(r[0]); }).sort().pop();
+  const dayRows = rows.filter(function (r) {
+    return dateOf(r[0]) === latest &&
+      CONFIG.REPORT_EXCLUDE.indexOf(String(r[3])) === -1;
+  });
+
+  // 同一人物の重複を除いて参加者リストを作る
+  const seen = {};
+  const people = [];
+  let startMin = '';
+  let endMax = '';
+  for (const r of dayRows) {
+    const key = String(r[7]);
+    if (seen[key]) continue;
+    seen[key] = true;
+    people.push(String(r[3]));
+    const s = hmOf(r[4]);
+    const e = hmOf(r[5]);
+    if (s && (!startMin || s < startMin)) startMin = s;
+    if (e && (!endMax || e > endMax)) endMax = e;
+  }
+
+  // 「名前(拠点)」の形式から拠点ごとにグループ化する
+  const groups = {};
+  const order = [];
+  for (const full of people) {
+    const m = full.match(/[((]([^))]+)[))]\s*$/);
+    const loc = m ? m[1] : '';
+    const bare = m ? full.slice(0, m.index).trim() : full;
+    if (!groups[loc]) {
+      groups[loc] = [];
+      order.push(loc);
+    }
+    groups[loc].push(bare || full);
+  }
+  const memberLines = order.map(function (loc) {
+    return (loc ? loc + ':' : '') + groups[loc].join('、');
+  });
+
+  return (
+    CONFIG.REPORT_HEADER + '\n\n' +
+    '■プログラム\n' +
+    '日付:' + latest + '\n' +
+    '時間:' + (startMin || '__:__') + '〜' + (endMax || '__:__') + '\n' +
+    '内容:(ここに記入)\n\n' +
+    '参加人数:' + people.length + '名\n' +
+    memberLines.join('\n') + '\n\n' +
+    '★本日の資料(プロンプト)\n(ここにURLを貼る)\n' +
+    '★アーカイブ\n(ここにURLを貼る)\n' +
+    '★アンケート(任意です)\n' +
+    (CONFIG.REPORT_SURVEY_URL || '(ここにURLを貼る)') + '\n'
+  );
+}
+
+function escapeHtml_(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 /** 毎日 CONFIG.TRIGGER_HOUR 時台に syncAttendance を実行するトリガーを設定(既存の設定は置き換える) */
