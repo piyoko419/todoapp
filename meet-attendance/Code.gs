@@ -19,8 +19,9 @@ const CONFIG = {
   LOOKBACK_DAYS: 90,
 
   // 集計対象の会議コード。空配列 [] にすると自分が主催した全会議が対象
-  // プログラム用リンク: https://meet.google.com/ust-ndqc-kwk
-  MEETING_CODES: ['ust-ndqc-kwk'],
+  // プログラム用リンク: https://meet.google.com/fnu-guox-pfg
+  // ust-ndqc-kwk は旧リンク(2026年8月に変更)。過去分の取り込みのため残している
+  MEETING_CODES: ['fnu-guox-pfg', 'ust-ndqc-kwk'],
 
   // この分数未満の滞在は出席とみなさない(0 なら全員カウント)
   MIN_MINUTES: 0,

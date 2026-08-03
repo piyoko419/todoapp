@@ -47,8 +47,9 @@ Google Meet は会議ごとに「誰が・いつ入室し・いつ退出した�
 出席管理スプレッドシート:
 https://docs.google.com/spreadsheets/d/1QjnEneVTFbG2cdrIZwZyc7Q_pLxFZMH-fltpUpFa-24/edit
 
-プログラム用の Meet リンク: **https://meet.google.com/ust-ndqc-kwk**
-(会議コード `ust-ndqc-kwk` を `Code.gs` の `MEETING_CODES` に設定済み。
+プログラム用の Meet リンク: **https://meet.google.com/fnu-guox-pfg**
+(会議コード `fnu-guox-pfg` を `Code.gs` の `MEETING_CODES` に設定済み。
+旧リンク `ust-ndqc-kwk` も過去データ取り込みのため設定に残しています。
 この会議の参加記録だけが集計されます。リンクを作り直した場合は設定も更新してください)
 
 ## セットアップ手順(約10分・初回のみ)
@@ -144,13 +145,15 @@ Meet のアカウント名(表示名)が本名と違う参加者のために、�
 ```js
 const CONFIG = {
   LOOKBACK_DAYS: 90,                  // 初回同期で遡る日数
-  MEETING_CODES: ['ust-ndqc-kwk'],    // 集計対象の会議コード。[] にすると主催した全会議が対象
+  // 集計対象の会議コード(複数指定可)。[] にすると主催した全会議が対象
+  MEETING_CODES: ['fnu-guox-pfg', 'ust-ndqc-kwk'],
   MIN_MINUTES: 0,                     // 例: 10 にすると10分未満の滞在は出席にカウントしない
 };
 ```
 
-会議コードは Meet の URL 末尾(`https://meet.google.com/ust-ndqc-kwk` の `ust-ndqc-kwk`)です。
-別の会議も集計したい場合は `MEETING_CODES` に追加してください。
+会議コードは Meet の URL 末尾(`https://meet.google.com/fnu-guox-pfg` の `fnu-guox-pfg`)です。
+リンクを作り直したときは、新しいコードを `MEETING_CODES` に追加してください
+(古いコードを残しておけば、過去の記録も引き続き集計対象になります)。
 
 ## トラブルシューティング
 
