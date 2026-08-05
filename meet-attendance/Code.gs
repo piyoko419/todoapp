@@ -38,7 +38,11 @@ const CONFIG = {
   REPORT_EXCLUDE: ['プログラム専用アカウント', 'プログラム_スキルアップ工房'],
 
   // ---- アンケート月次集計の設定 ----
-  // フォームの回答シート名(空文字なら「フォームの回答」で始まるシートを自動で探す)
+  // 回答が入っているスプレッドシートのURL。
+  // 空文字ならこの出席管理シート自身から探す
+  SURVEY_SPREADSHEET_URL:
+    'https://docs.google.com/spreadsheets/d/1zvenC0nI2EKyXqtmSWZKnaOK9cSfZ3wGBWWMHE2apfw/edit',
+  // 回答シート名(空文字なら「タイムスタンプ」列を持つシートを自動で探す)
   SURVEY_SHEET: '',
   // 自由記述を報告文に載せる最大件数
   SURVEY_MAX_COMMENTS: 20,
@@ -243,13 +247,14 @@ function buildReportText_(rows, tz) {
  */
 function createSurveyDigest() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = findSurveySheet_(ss);
+  const surveySs = openSurveySpreadsheet_(ss);
+  const sheet = findSurveySheet_(surveySs);
   if (!sheet) {
     SpreadsheetApp.getUi().alert(
       'アンケートの回答シートが見つかりません。\n\n' +
-      'Googleフォームの編集画面 →「回答」タブ → スプレッドシートのアイコン →\n' +
-      '「既存のスプレッドシートを選択」でこのシートを指定してください。\n' +
-      '(回答用のシートが自動で追加されます)'
+      '「' + surveySs.getName() + '」の中に、1行目が「タイムスタンプ」で始まる\n' +
+      '回答シートがあるか確認してください。\n' +
+      'シート名を直接指定する場合は、Code.gs の CONFIG.SURVEY_SHEET に設定します。'
     );
     return;
   }
@@ -284,7 +289,24 @@ function createSurveyDigest() {
   showCopyableText_(text, 'アンケート結果(' + month + ')', 'プログラムチャットに貼り付けてください。');
 }
 
-/** 回答シートを探す(設定優先、なければ「フォームの回答」で始まるシート) */
+/** アンケート回答が入っているスプレッドシートを開く(設定がなければこのシート自身) */
+function openSurveySpreadsheet_(ss) {
+  if (!CONFIG.SURVEY_SPREADSHEET_URL) return ss;
+  try {
+    return SpreadsheetApp.openByUrl(CONFIG.SURVEY_SPREADSHEET_URL);
+  } catch (e) {
+    throw new Error(
+      'アンケートのスプレッドシートを開けませんでした。URLが正しいか、' +
+      'このアカウントに閲覧権限があるかを確認してください。\n' +
+      CONFIG.SURVEY_SPREADSHEET_URL + '\n(詳細: ' + e.message + ')'
+    );
+  }
+}
+
+/**
+ * 回答シートを探す。シート名の指定があればそれを、なければ
+ * 「タイムスタンプ」列を持つシート(フォーム回答シート)を自動で選ぶ。
+ */
 function findSurveySheet_(ss) {
   if (CONFIG.SURVEY_SHEET) return ss.getSheetByName(CONFIG.SURVEY_SHEET);
   const sheets = ss.getSheets();
@@ -294,7 +316,15 @@ function findSurveySheet_(ss) {
       return s;
     }
   }
-  return null;
+  // シート名が変更されている場合に備え、ヘッダー行の内容から判定する
+  for (const s of sheets) {
+    if (s.getLastRow() < 1 || s.getLastColumn() < 1) continue;
+    const headers = s.getRange(1, 1, 1, s.getLastColumn()).getValues()[0];
+    if (headers.some(function (h) { return /タイムスタンプ|Timestamp/i.test(String(h)); })) {
+      return s;
+    }
+  }
+  return sheets.length === 1 ? sheets[0] : null;
 }
 
 /**
