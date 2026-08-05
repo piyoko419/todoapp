@@ -44,6 +44,10 @@ const CONFIG = {
     'https://docs.google.com/spreadsheets/d/1zvenC0nI2EKyXqtmSWZKnaOK9cSfZ3wGBWWMHE2apfw/edit?usp=sharing',
   // 回答シート名(空文字なら「タイムスタンプ」列を持つシートを自動で探す)
   SURVEY_SHEET: '',
+  // 回答を取り込むシート名(IMPORTRANGE 方式で使う)
+  SURVEY_IMPORT_SHEET: 'アンケート回答(取込)',
+  // 取り込み元のタブ名(空文字なら先頭のシート)
+  SURVEY_SOURCE_TAB: '',
   // 自由記述を報告文に載せる最大件数
   SURVEY_MAX_COMMENTS: 20,
 };
@@ -57,6 +61,7 @@ function onOpen() {
     .addItem('集計だけ更新', 'rebuildReports')
     .addItem('報告文を作成(最新回)', 'createReportDraft')
     .addItem('アンケート結果をまとめる(月次)', 'createSurveyDigest')
+    .addItem('アンケート取込シートを作成', 'setupSurveyImport')
     .addSeparator()
     .addItem('毎日の自動同期を設定', 'setupDailyTrigger')
     .addToUi();
@@ -289,26 +294,57 @@ function createSurveyDigest() {
   showCopyableText_(text, 'アンケート結果(' + month + ')', 'プログラムチャットに貼り付けてください。');
 }
 
-/** アンケート回答が入っているスプレッドシートを開く(設定がなければこのシート自身) */
+/**
+ * アンケート回答が入っているスプレッドシートを開く。
+ * 別ファイルを直接開ける権限(spreadsheets スコープ)がない環境では、
+ * IMPORTRANGE で取り込んだシートを使うためこのファイル自身を返す。
+ */
 function openSurveySpreadsheet_(ss) {
   if (!CONFIG.SURVEY_SPREADSHEET_URL) return ss;
   const id = extractSpreadsheetId_(CONFIG.SURVEY_SPREADSHEET_URL);
   try {
-    // URL に余分なパラメータが付いていても開けるよう、ID を取り出して開く
     return id
       ? SpreadsheetApp.openById(id)
       : SpreadsheetApp.openByUrl(CONFIG.SURVEY_SPREADSHEET_URL);
   } catch (e) {
-    throw new Error(
-      'アンケートのスプレッドシートを開けませんでした。\n' +
-      '次の2点を確認してください。\n' +
-      '(1) appsscript.json のスコープが「spreadsheets」になっているか' +
-      '(「spreadsheets.currentonly」だと他のファイルを開けません)。' +
-      '変更した場合は syncAttendance を実行して再承認が必要です。\n' +
-      '(2) このアカウントに対象ファイルの閲覧権限があるか。\n' +
-      'URL: ' + CONFIG.SURVEY_SPREADSHEET_URL + '\n(詳細: ' + e.message + ')'
-    );
+    Logger.log('別ファイルを直接開けないため、取込シートを使います: ' + e.message);
+    return ss;
   }
+}
+
+/**
+ * アンケート回答を IMPORTRANGE で取り込むシートを作成する。
+ * スクリプトの権限を広げずに別スプレッドシートの内容を参照するための方法。
+ */
+function setupSurveyImport() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  const id = extractSpreadsheetId_(CONFIG.SURVEY_SPREADSHEET_URL);
+  if (!id) {
+    ui.alert('CONFIG.SURVEY_SPREADSHEET_URL にアンケートのURLを設定してください。');
+    return;
+  }
+
+  let sheet = ss.getSheetByName(CONFIG.SURVEY_IMPORT_SHEET);
+  if (!sheet) sheet = ss.insertSheet(CONFIG.SURVEY_IMPORT_SHEET);
+  sheet.clear();
+
+  const range = CONFIG.SURVEY_SOURCE_TAB
+    ? "'" + CONFIG.SURVEY_SOURCE_TAB.replace(/'/g, "''") + "'!A:Z"
+    : 'A:Z';
+  sheet.getRange('A1').setFormula(
+    '=IMPORTRANGE("' + id + '","' + range + '")'
+  );
+
+  ss.setActiveSheet(sheet);
+  ui.alert(
+    '「' + CONFIG.SURVEY_IMPORT_SHEET + '」シートを作成しました。\n\n' +
+    'A1セルに「#REF!」と表示され「アクセスを許可」ボタンが出た場合は、\n' +
+    'クリックして許可してください(初回のみ)。\n\n' +
+    '回答が表示されたら、メニューの「アンケート結果をまとめる(月次)」が使えます。\n' +
+    '別のタブを取り込みたい場合は、Code.gs の CONFIG.SURVEY_SOURCE_TAB に\n' +
+    'タブ名を設定してからもう一度実行してください。'
+  );
 }
 
 /** スプレッドシートURLからファイルIDを取り出す */
@@ -350,6 +386,8 @@ function checkSurveyAccess() {
  */
 function findSurveySheet_(ss) {
   if (CONFIG.SURVEY_SHEET) return ss.getSheetByName(CONFIG.SURVEY_SHEET);
+  const imported = ss.getSheetByName(CONFIG.SURVEY_IMPORT_SHEET);
+  if (imported && imported.getLastRow() > 1) return imported;
   const sheets = ss.getSheets();
   for (const s of sheets) {
     const name = s.getName();
