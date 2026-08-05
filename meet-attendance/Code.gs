@@ -36,6 +36,12 @@ const CONFIG = {
   REPORT_SURVEY_URL: 'https://forms.gle/hZmYXmAfiyg82gz56',
   // 参加人数・名簿から除外する名前(運営アカウントなど)
   REPORT_EXCLUDE: ['プログラム専用アカウント', 'プログラム_スキルアップ工房'],
+
+  // ---- アンケート月次集計の設定 ----
+  // フォームの回答シート名(空文字なら「フォームの回答」で始まるシートを自動で探す)
+  SURVEY_SHEET: '',
+  // 自由記述を報告文に載せる最大件数
+  SURVEY_MAX_COMMENTS: 20,
 };
 // ======================
 
@@ -46,6 +52,7 @@ function onOpen() {
     .addItem('今すぐ同期(参加記録を取得)', 'syncAttendance')
     .addItem('集計だけ更新', 'rebuildReports')
     .addItem('報告文を作成(最新回)', 'createReportDraft')
+    .addItem('アンケート結果をまとめる(月次)', 'createSurveyDigest')
     .addSeparator()
     .addItem('毎日の自動同期を設定', 'setupDailyTrigger')
     .addToUi();
@@ -168,19 +175,11 @@ function createReportDraft() {
     .getRange(2, 1, logSheet.getLastRow() - 1, LOG_HEADERS.length)
     .getValues();
   const text = buildReportText_(rows, ss.getSpreadsheetTimeZone());
-
-  const html = HtmlService.createHtmlOutput(
-    '<div style="font-family:sans-serif;">' +
-    '<p style="margin:0 0 6px;">時間・内容・資料URLの欄を埋めてChatworkに貼り付けてください。</p>' +
-    '<textarea id="t" style="width:100%;height:330px;box-sizing:border-box;">' +
-    escapeHtml_(text) +
-    '</textarea><br>' +
-    '<button style="margin-top:8px;padding:6px 16px;" onclick="' +
-    "var t=document.getElementById('t');t.select();document.execCommand('copy');" +
-    "this.textContent='コピーしました!';" +
-    '">全文をコピー</button></div>'
-  ).setWidth(520).setHeight(460);
-  SpreadsheetApp.getUi().showModalDialog(html, '報告文(Chatwork用)');
+  showCopyableText_(
+    text,
+    '報告文(Chatwork用)',
+    '時間・内容・資料URLの欄を埋めてChatworkに貼り付けてください。'
+  );
 }
 
 /** 参加ログの行データから報告文テキストを組み立てる */
@@ -236,6 +235,182 @@ function buildReportText_(rows, tz) {
     '★アンケート(任意です)\n' +
     CONFIG.REPORT_SURVEY_URL + '\n'
   );
+}
+
+/**
+ * アンケート(Googleフォーム)の回答を月ごとに集計し、
+ * プログラムチャットに流せるフィードバック文の下書きを作成する。
+ */
+function createSurveyDigest() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = findSurveySheet_(ss);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert(
+      'アンケートの回答シートが見つかりません。\n\n' +
+      'Googleフォームの編集画面 →「回答」タブ → スプレッドシートのアイコン →\n' +
+      '「既存のスプレッドシートを選択」でこのシートを指定してください。\n' +
+      '(回答用のシートが自動で追加されます)'
+    );
+    return;
+  }
+  if (sheet.getLastRow() < 2) {
+    toast_('アンケートの回答がまだありません。');
+    return;
+  }
+
+  const tz = ss.getSpreadsheetTimeZone();
+  const ui = SpreadsheetApp.getUi();
+  const res = ui.prompt(
+    'アンケート集計',
+    '集計する月を YYYY-MM 形式で入力してください(空欄なら先月)',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  let month = res.getResponseText().trim();
+  if (!month) {
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    month = Utilities.formatDate(d, tz, 'yyyy-MM');
+  }
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    ui.alert('月の形式が正しくありません(例: 2026-07)。');
+    return;
+  }
+
+  const values = sheet.getRange(1, 1, sheet.getLastRow(), sheet.getLastColumn()).getValues();
+  const text = buildSurveyDigest_(values, month, tz);
+  showCopyableText_(text, 'アンケート結果(' + month + ')', 'プログラムチャットに貼り付けてください。');
+}
+
+/** 回答シートを探す(設定優先、なければ「フォームの回答」で始まるシート) */
+function findSurveySheet_(ss) {
+  if (CONFIG.SURVEY_SHEET) return ss.getSheetByName(CONFIG.SURVEY_SHEET);
+  const sheets = ss.getSheets();
+  for (const s of sheets) {
+    const name = s.getName();
+    if (name.indexOf('フォームの回答') === 0 || name.indexOf('Form Responses') === 0) {
+      return s;
+    }
+  }
+  return null;
+}
+
+/**
+ * 回答データ(1行目がヘッダー)から指定月のフィードバック文を組み立てる。
+ * 設問の型は回答内容から自動判別する(評価スコア / 選択肢 / 自由記述)。
+ */
+function buildSurveyDigest_(values, month, tz) {
+  const headers = values[0].map(function (h) { return String(h).trim(); });
+
+  // タイムスタンプ列を特定する(見つからなければ先頭列)
+  let tsCol = 0;
+  for (let i = 0; i < headers.length; i++) {
+    if (/タイムスタンプ|Timestamp/i.test(headers[i])) { tsCol = i; break; }
+  }
+
+  const monthOf = function (v) {
+    if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM');
+    const m = String(v).match(/^(\d{4})[-/](\d{1,2})/);
+    return m ? m[1] + '-' + ('0' + m[2]).slice(-2) : '';
+  };
+  const rows = values.slice(1).filter(function (r) { return monthOf(r[tsCol]) === month; });
+
+  if (rows.length === 0) {
+    return '■アンケート結果(' + formatMonthJa_(month) + ')\n\nこの月の回答はありませんでした。';
+  }
+
+  const blocks = [];
+  for (let c = 0; c < headers.length; c++) {
+    if (c === tsCol || !headers[c]) continue;
+    const answers = rows
+      .map(function (r) { return String(r[c]).trim(); })
+      .filter(function (v) { return v !== ''; });
+    if (answers.length === 0) continue;
+    blocks.push(summarizeQuestion_(headers[c], answers));
+  }
+
+  return (
+    '■アンケート結果(' + formatMonthJa_(month) + ')\n' +
+    '回答数:' + rows.length + '件\n\n' +
+    blocks.join('\n\n')
+  );
+}
+
+/** 1設問分の集計テキストを作る。回答の内容から型を自動判別する */
+function summarizeQuestion_(question, answers) {
+  // 「5」「4点」「5 とても満足」など先頭が数字なら評価スコアとして扱う
+  const nums = answers.map(function (a) {
+    const m = a.match(/^(\d+(?:\.\d+)?)/);
+    return m ? parseFloat(m[1]) : null;
+  });
+  const isScore = nums.every(function (n) { return n !== null; }) &&
+    Math.max.apply(null, nums) <= 10;
+
+  if (isScore) {
+    const sum = nums.reduce(function (a, b) { return a + b; }, 0);
+    const avg = Math.round((sum / nums.length) * 10) / 10;
+    const max = Math.max.apply(null, nums);
+    const dist = countBy_(answers.map(function (a, i) { return String(nums[i]); }));
+    const distText = Object.keys(dist)
+      .sort(function (a, b) { return Number(b) - Number(a); })
+      .map(function (k) { return k + ':' + dist[k] + '件'; })
+      .join(' / ');
+    return '【' + question + '】平均 ' + avg + ' / ' + max + '\n　' + distText;
+  }
+
+  // 選択肢(同じ回答が繰り返される・短い)なら件数集計、それ以外は自由記述として列挙する
+  const counts = countBy_(answers);
+  const keys = Object.keys(counts);
+  const maxLen = Math.max.apply(null, keys.map(function (k) { return k.length; }));
+  const hasRepeat = keys.length < answers.length;
+  const isChoice = keys.length <= 8 && maxLen <= 30 && (hasRepeat || maxLen <= 12);
+
+  if (isChoice) {
+    const lines = keys
+      .sort(function (a, b) { return counts[b] - counts[a]; })
+      .map(function (k) {
+        const pct = Math.round((counts[k] / answers.length) * 100);
+        return '　・' + k + ':' + counts[k] + '件(' + pct + '%)';
+      });
+    return '【' + question + '】\n' + lines.join('\n');
+  }
+
+  const shown = answers.slice(0, CONFIG.SURVEY_MAX_COMMENTS);
+  const lines = shown.map(function (a) { return '　・' + a.replace(/\r?\n/g, ' '); });
+  const more = answers.length > shown.length
+    ? '\n　…ほか' + (answers.length - shown.length) + '件'
+    : '';
+  return '【' + question + '】\n' + lines.join('\n') + more;
+}
+
+/** '2026-07' を '2026年7月' の形式にする */
+function formatMonthJa_(month) {
+  const parts = month.split('-');
+  return parts[0] + '年' + parseInt(parts[1], 10) + '月';
+}
+
+function countBy_(list) {
+  const counts = {};
+  for (const v of list) counts[v] = (counts[v] || 0) + 1;
+  return counts;
+}
+
+/** テキストをコピーできるダイアログで表示する */
+function showCopyableText_(text, title, note) {
+  const html = HtmlService.createHtmlOutput(
+    '<div style="font-family:sans-serif;">' +
+    '<p style="margin:0 0 6px;">' + escapeHtml_(note) + '</p>' +
+    '<textarea id="t" style="width:100%;height:330px;box-sizing:border-box;">' +
+    escapeHtml_(text) +
+    '</textarea><br>' +
+    '<button style="margin-top:8px;padding:6px 16px;" onclick="' +
+    "var t=document.getElementById('t');t.select();document.execCommand('copy');" +
+    "this.textContent='コピーしました!';" +
+    '">全文をコピー</button></div>'
+  ).setWidth(520).setHeight(460);
+  SpreadsheetApp.getUi().showModalDialog(html, title);
 }
 
 function escapeHtml_(s) {
