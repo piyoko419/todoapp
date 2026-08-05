@@ -41,7 +41,7 @@ const CONFIG = {
   // 回答が入っているスプレッドシートのURL。
   // 空文字ならこの出席管理シート自身から探す
   SURVEY_SPREADSHEET_URL:
-    'https://docs.google.com/spreadsheets/d/1zvenC0nI2EKyXqtmSWZKnaOK9cSfZ3wGBWWMHE2apfw/edit',
+    'https://docs.google.com/spreadsheets/d/1zvenC0nI2EKyXqtmSWZKnaOK9cSfZ3wGBWWMHE2apfw/edit?usp=sharing',
   // 回答シート名(空文字なら「タイムスタンプ」列を持つシートを自動で探す)
   SURVEY_SHEET: '',
   // 自由記述を報告文に載せる最大件数
