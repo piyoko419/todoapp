@@ -32,7 +32,7 @@ const CONFIG = {
   // ---- Chatwork報告文の設定 ----
   // 冒頭のあいさつ部分
   REPORT_HEADER: '【共有】\nノービー記録用です🙇',
-  // アンケートのURL(毎回同じ場合はここに設定。空文字なら「(ここにURLを貼る)」になる)
+  // アンケートのURL(毎回同じ場合はここに設定。空文字なら空行になる)
   REPORT_SURVEY_URL: 'https://forms.gle/hZmYXmAfiyg82gz56',
   // 参加人数・名簿から除外する名前(運営アカウントなど)
   REPORT_EXCLUDE: ['プログラム専用アカウント', 'プログラム_スキルアップ工房'],
@@ -231,10 +231,10 @@ function buildReportText_(rows, tz) {
     '内容:\n\n' +
     '参加人数:' + people.length + '名\n' +
     memberLines.join('\n') + '\n\n' +
-    '★本日の資料(プロンプト)\n(ここにURLを貼る)\n' +
-    '★アーカイブ\n(ここにURLを貼る)\n' +
+    '★本日の資料(プロンプト)\n\n' +
+    '★アーカイブ\n\n' +
     '★アンケート(任意です)\n' +
-    (CONFIG.REPORT_SURVEY_URL || '(ここにURLを貼る)') + '\n'
+    CONFIG.REPORT_SURVEY_URL + '\n'
   );
 }
 
