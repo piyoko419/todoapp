@@ -292,14 +292,55 @@ function createSurveyDigest() {
 /** アンケート回答が入っているスプレッドシートを開く(設定がなければこのシート自身) */
 function openSurveySpreadsheet_(ss) {
   if (!CONFIG.SURVEY_SPREADSHEET_URL) return ss;
+  const id = extractSpreadsheetId_(CONFIG.SURVEY_SPREADSHEET_URL);
   try {
-    return SpreadsheetApp.openByUrl(CONFIG.SURVEY_SPREADSHEET_URL);
+    // URL に余分なパラメータが付いていても開けるよう、ID を取り出して開く
+    return id
+      ? SpreadsheetApp.openById(id)
+      : SpreadsheetApp.openByUrl(CONFIG.SURVEY_SPREADSHEET_URL);
   } catch (e) {
     throw new Error(
-      'アンケートのスプレッドシートを開けませんでした。URLが正しいか、' +
-      'このアカウントに閲覧権限があるかを確認してください。\n' +
-      CONFIG.SURVEY_SPREADSHEET_URL + '\n(詳細: ' + e.message + ')'
+      'アンケートのスプレッドシートを開けませんでした。\n' +
+      '次の2点を確認してください。\n' +
+      '(1) appsscript.json のスコープが「spreadsheets」になっているか' +
+      '(「spreadsheets.currentonly」だと他のファイルを開けません)。' +
+      '変更した場合は syncAttendance を実行して再承認が必要です。\n' +
+      '(2) このアカウントに対象ファイルの閲覧権限があるか。\n' +
+      'URL: ' + CONFIG.SURVEY_SPREADSHEET_URL + '\n(詳細: ' + e.message + ')'
     );
+  }
+}
+
+/** スプレッドシートURLからファイルIDを取り出す */
+function extractSpreadsheetId_(url) {
+  const m = String(url).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  return m ? m[1] : '';
+}
+
+/**
+ * アンケートのスプレッドシートに接続できるかを確認する診断用の関数。
+ * Apps Script エディタで実行し、実行ログに結果が出る。
+ */
+function checkSurveyAccess() {
+  Logger.log('URL: ' + CONFIG.SURVEY_SPREADSHEET_URL);
+  Logger.log('抽出したファイルID: ' + extractSpreadsheetId_(CONFIG.SURVEY_SPREADSHEET_URL));
+  try {
+    const ss = openSurveySpreadsheet_(SpreadsheetApp.getActiveSpreadsheet());
+    Logger.log('✅ 接続できました: ' + ss.getName());
+    const sheets = ss.getSheets().map(function (s) { return s.getName(); });
+    Logger.log('シート一覧: ' + sheets.join(' / '));
+    const target = findSurveySheet_(ss);
+    if (!target) {
+      Logger.log('⚠️ 回答シートを特定できませんでした(タイムスタンプ列が見つかりません)。');
+      return;
+    }
+    Logger.log('回答シート: ' + target.getName() + '(' + (target.getLastRow() - 1) + '件)');
+    if (target.getLastRow() >= 1) {
+      Logger.log('設問: ' +
+        target.getRange(1, 1, 1, target.getLastColumn()).getValues()[0].join(' | '));
+    }
+  } catch (e) {
+    Logger.log('❌ ' + e.message);
   }
 }
 
