@@ -35,7 +35,7 @@ const CONFIG = {
   // アンケートのURL(毎回同じ場合はここに設定。空文字なら「(ここにURLを貼る)」になる)
   REPORT_SURVEY_URL: 'https://forms.gle/hZmYXmAfiyg82gz56',
   // 参加人数・名簿から除外する名前(運営アカウントなど)
-  REPORT_EXCLUDE: ['プログラム_スキルアップ工房'],
+  REPORT_EXCLUDE: ['プログラム専用アカウント', 'プログラム_スキルアップ工房'],
 };
 // ======================
 
@@ -206,15 +206,14 @@ function buildReportText_(rows, tz) {
     people.push(String(r[3]));
   }
 
-  // 「名前(拠点)」の形式から拠点ごとにグループ化する。
-  // 個人名は拠点部分を取り除いて表示し、事業所PCなどの共用端末はフルネームのまま表示する
+  // 「名前(拠点)」の形式から拠点ごとにグループ化し、名前から拠点部分を取り除く。
+  // 半角 () と全角 () の両方に対応する(（ = (、） = ))
   const groups = {};
   const order = [];
   for (const full of people) {
-    const m = full.match(/[((]([^))]+)[))]\s*$/);
-    const loc = m ? m[1] : '';
-    const keepFull = /事業所PC/.test(full);
-    const bare = keepFull || !m ? full : full.slice(0, m.index).trim();
+    const m = full.match(/[(（]([^)）]+)[)）]\s*$/);
+    const loc = m ? m[1].trim() : '';
+    const bare = m ? full.slice(0, m.index).trim() : full;
     if (!groups[loc]) {
       groups[loc] = [];
       order.push(loc);
@@ -222,7 +221,7 @@ function buildReportText_(rows, tz) {
     groups[loc].push(bare || full);
   }
   const memberLines = order.map(function (loc) {
-    return (loc ? loc + ':' : '') + groups[loc].join('、');
+    return (loc ? loc + '：' : '') + groups[loc].join('、'); // ： = :
   });
 
   return (
