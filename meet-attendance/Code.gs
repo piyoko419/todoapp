@@ -47,7 +47,7 @@ const CONFIG = {
   // 回答を取り込むシート名(IMPORTRANGE 方式で使う)
   SURVEY_IMPORT_SHEET: 'アンケート回答(取込)',
   // 取り込み元のタブ名(空文字なら先頭のシート)
-  SURVEY_SOURCE_TAB: '',
+  SURVEY_SOURCE_TAB: 'Form_Responses',
   // 自由記述を報告文に載せる最大件数
   SURVEY_MAX_COMMENTS: 20,
 };
@@ -434,7 +434,12 @@ function buildSurveyDigest_(values, month, tz) {
   for (let c = 0; c < headers.length; c++) {
     if (c === tsCol || !headers[c]) continue;
     const answers = rows
-      .map(function (r) { return String(r[c]).trim(); })
+      .map(function (r) {
+        // 日付セルは yyyy-MM-dd に整えてから集計する
+        return r[c] instanceof Date
+          ? Utilities.formatDate(r[c], tz, 'yyyy-MM-dd')
+          : String(r[c]).trim();
+      })
       .filter(function (v) { return v !== ''; });
     if (answers.length === 0) continue;
     blocks.push(summarizeQuestion_(headers[c], answers));
@@ -449,10 +454,10 @@ function buildSurveyDigest_(values, month, tz) {
 
 /** 1設問分の集計テキストを作る。回答の内容から型を自動判別する */
 function summarizeQuestion_(question, answers) {
-  // 「5」「4点」「5 とても満足」など先頭が数字なら評価スコアとして扱う
+  // 回答そのものが数値(「5」など)なら評価スコアとして平均を出す。
+  // 「1.わかりやすかった」のような選択肢は下の件数集計に回す
   const nums = answers.map(function (a) {
-    const m = a.match(/^(\d+(?:\.\d+)?)/);
-    return m ? parseFloat(m[1]) : null;
+    return /^\d+(\.\d+)?$/.test(a) ? parseFloat(a) : null;
   });
   const isScore = nums.every(function (n) { return n !== null; }) &&
     Math.max.apply(null, nums) <= 10;
@@ -474,15 +479,20 @@ function summarizeQuestion_(question, answers) {
   const keys = Object.keys(counts);
   const maxLen = Math.max.apply(null, keys.map(function (k) { return k.length; }));
   const hasRepeat = keys.length < answers.length;
-  const isChoice = keys.length <= 8 && maxLen <= 30 && (hasRepeat || maxLen <= 12);
+  const isChoice = keys.length <= 12 && maxLen <= 40 && (hasRepeat || maxLen <= 12);
 
   if (isChoice) {
-    const lines = keys
-      .sort(function (a, b) { return counts[b] - counts[a]; })
-      .map(function (k) {
-        const pct = Math.round((counts[k] / answers.length) * 100);
-        return '　・' + k + ':' + counts[k] + '件(' + pct + '%)';
-      });
+    // 「1.」「2.」で始まる選択肢はその順番、それ以外は件数の多い順に並べる
+    const numbered = keys.every(function (k) { return /^\d+[.．]/.test(k); });
+    const sorted = keys.sort(
+      numbered
+        ? function (a, b) { return parseInt(a, 10) - parseInt(b, 10); }
+        : function (a, b) { return counts[b] - counts[a]; }
+    );
+    const lines = sorted.map(function (k) {
+      const pct = Math.round((counts[k] / answers.length) * 100);
+      return '　・' + k + ':' + counts[k] + '件(' + pct + '%)';
+    });
     return '【' + question + '】\n' + lines.join('\n');
   }
 
