@@ -1,386 +1,115 @@
-"use client";
+import Link from "next/link";
+import AppNav from "@/components/AppNav";
+import { toISODate } from "@/lib/date";
+import { listJobs, listStaff } from "@/lib/jobs";
+import { isConfigured } from "@/lib/line/client";
+import { Job, STATUS_LABEL, URGENCY_LABEL, isOpen } from "@/lib/types";
+import { STATUS_STYLE, URGENCY_STYLE, dueLabel } from "@/lib/ui";
 
-import { useState } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+export const dynamic = "force-dynamic";
 
-type DueDate = "today" | "tomorrow" | "later";
-
-type Todo = {
-  id: string;
-  text: string;
-  completed: boolean;
-  dueDate: DueDate;
-};
-
-const SECTIONS: {
-  key: DueDate;
-  label: string;
-  accent: string;
-  badge: string;
-  dot: string;
-}[] = [
-  {
-    key: "today",
-    label: "今日",
-    accent: "text-violet-500",
-    badge: "bg-violet-100 text-violet-600 border-violet-200",
-    dot: "bg-violet-400",
-  },
-  {
-    key: "tomorrow",
-    label: "明日",
-    accent: "text-sky-500",
-    badge: "bg-sky-100 text-sky-600 border-sky-200",
-    dot: "bg-sky-400",
-  },
-  {
-    key: "later",
-    label: "それ以降",
-    accent: "text-emerald-500",
-    badge: "bg-emerald-100 text-emerald-600 border-emerald-200",
-    dot: "bg-emerald-400",
-  },
-];
-
-function SortableTaskItem({
-  todo,
-  onToggle,
-  onDelete,
-  onEdit,
-}: {
-  todo: Todo;
-  onToggle: () => void;
-  onDelete: () => void;
-  onEdit: (text: string) => void;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: todo.id });
-
-  const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState(todo.text);
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
-
-  const handleSave = () => {
-    const trimmed = editText.trim();
-    if (trimmed) onEdit(trimmed);
-    else setEditText(todo.text);
-    setIsEditing(false);
-  };
-
+function JobLine({ job, today, assignee }: { job: Job; today: string; assignee: string }) {
+  const overdue = job.dueDate !== null && job.dueDate < today;
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`group flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all ${
-        isDragging
-          ? "bg-white border-violet-200 shadow-lg shadow-violet-100"
-          : "bg-white border-slate-100 hover:border-violet-200 hover:shadow-sm"
-      }`}
-    >
-      {/* ドラッグハンドル */}
-      <button
-        {...attributes}
-        {...listeners}
-        className="flex-shrink-0 text-slate-200 hover:text-slate-400 cursor-grab active:cursor-grabbing touch-none transition-colors"
-        aria-label="並び替え"
-      >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-          <circle cx="5" cy="4" r="1.2" />
-          <circle cx="11" cy="4" r="1.2" />
-          <circle cx="5" cy="8" r="1.2" />
-          <circle cx="11" cy="8" r="1.2" />
-          <circle cx="5" cy="12" r="1.2" />
-          <circle cx="11" cy="12" r="1.2" />
-        </svg>
-      </button>
-
-      {/* チェックボックス */}
-      <button
-        onClick={onToggle}
-        className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-          todo.completed
-            ? "bg-violet-400 border-violet-400"
-            : "border-slate-200 hover:border-violet-300"
-        }`}
-        aria-label={todo.completed ? "未完了に戻す" : "完了にする"}
-      >
-        {todo.completed && (
-          <svg
-            className="w-3 h-3 text-white"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={3}
+    <div className="flex overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className={`w-1.5 ${URGENCY_STYLE[job.urgency].bar}`} />
+      <div className="flex-1 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-bold text-slate-700">{job.room}号室</span>
+          <span className="text-sm text-slate-400">{job.property}</span>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-xs ${URGENCY_STYLE[job.urgency].chip}`}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        )}
-      </button>
-
-      {/* テキスト / 編集 */}
-      {isEditing ? (
-        <input
-          autoFocus
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          onBlur={handleSave}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) handleSave();
-            if (e.key === "Escape") {
-              setEditText(todo.text);
-              setIsEditing(false);
-            }
-          }}
-          className="flex-1 bg-violet-50 text-slate-700 text-sm px-2 py-1 rounded-lg outline-none border border-violet-300"
-        />
-      ) : (
-        <span
-          onClick={() => !todo.completed && setIsEditing(true)}
-          title={todo.completed ? undefined : "クリックして編集"}
-          className={`flex-1 text-sm leading-relaxed transition-colors ${
-            todo.completed
-              ? "line-through text-slate-300 cursor-default"
-              : "text-slate-600 cursor-pointer hover:text-slate-900"
-          }`}
-        >
-          {todo.text}
-        </span>
-      )}
-
-      {/* 削除 */}
-      <button
-        onClick={onDelete}
-        className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-xl text-slate-200 hover:text-red-400 hover:bg-red-50 transition-all"
-        aria-label="削除"
-      >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M6 18L18 6M6 6l12 12"
-          />
-        </svg>
-      </button>
+            {URGENCY_LABEL[job.urgency]}
+          </span>
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-xs ${STATUS_STYLE[job.status]}`}
+          >
+            {STATUS_LABEL[job.status]}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-slate-500">
+          {job.workTypes.join("・") || "内容未設定"} ・ 担当 {assignee}
+        </p>
+        <p className={`text-xs ${overdue ? "font-bold text-rose-500" : "text-slate-400"}`}>
+          {job.dueDate ?? "期限未定"}（{dueLabel(job.dueDate, today)}）
+        </p>
+      </div>
     </div>
   );
 }
 
-export default function Home() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [inputValue, setInputValue] = useState("");
-  const [selectedDue, setSelectedDue] = useState<DueDate>("today");
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className={`mt-1 text-3xl font-bold ${tone}`}>{value}</p>
+    </div>
   );
+}
 
-  const addTodo = () => {
-    const trimmed = inputValue.trim();
-    if (!trimmed) return;
-    setTodos((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(),
-        text: trimmed,
-        completed: false,
-        dueDate: selectedDue,
-      },
-    ]);
-    setInputValue("");
-  };
+export default async function DashboardPage() {
+  const [jobs, staff] = await Promise.all([listJobs(), listStaff()]);
+  const today = toISODate(new Date());
+  const open = jobs.filter(isOpen);
+  const overdue = open.filter((job) => job.dueDate !== null && job.dueDate < today);
+  const urgent = open.filter((job) => job.urgency === "urgent");
+  const unassigned = open.filter((job) => job.assigneeId === null);
+  const lineReady = isConfigured();
 
-  const toggleTodo = (id: string) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
-    );
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const editTodo = (id: string, text: string) => {
-    setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, text } : t)));
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const activeTodo = todos.find((t) => t.id === active.id);
-    const overTodo = todos.find((t) => t.id === over.id);
-    if (!activeTodo || !overTodo || activeTodo.dueDate !== overTodo.dueDate)
-      return;
-
-    setTodos((prev) => {
-      const oldIndex = prev.findIndex((t) => t.id === active.id);
-      const newIndex = prev.findIndex((t) => t.id === over.id);
-      return arrayMove(prev, oldIndex, newIndex);
-    });
-  };
-
-  const activeCount = todos.filter((t) => !t.completed).length;
+  const nameOf = (id: string | null) => staff.find((s) => s.id === id)?.name ?? "未割当";
+  const attention = [...overdue, ...urgent.filter((job) => !overdue.includes(job))].slice(0, 8);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-violet-50 via-sky-50 to-emerald-50 px-4 py-12 flex flex-col items-center">
-      {/* ヘッダー */}
-      <div className="w-full max-w-lg mb-8">
-        <h1 className="text-3xl font-bold text-slate-700 tracking-tight">
-          やること
-        </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          {activeCount > 0
-            ? `${activeCount} 件の未完了タスク`
-            : todos.length === 0
-            ? "タスクを追加してみましょう"
-            : "すべて完了しました 🎉"}
-        </p>
+    <main className="max-w-5xl mx-auto px-6 py-10">
+      <AppNav />
+      <h1 className="text-2xl font-bold text-slate-700 mb-1">ダッシュボード</h1>
+      <p className="text-sm text-slate-500 mb-6">{today} 時点の状況です。</p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+        <Stat label="未完了" value={open.length} tone="text-slate-700" />
+        <Stat label="至急" value={urgent.length} tone="text-rose-500" />
+        <Stat label="期限超過" value={overdue.length} tone="text-amber-500" />
+        <Stat label="未割当" value={unassigned.length} tone="text-violet-500" />
       </div>
 
-      {/* 入力エリア */}
-      <div className="w-full max-w-lg mb-10 bg-white/70 backdrop-blur-sm border border-white rounded-3xl p-5 shadow-sm shadow-violet-100">
-        {/* セクション選択 */}
-        <div className="flex gap-2 mb-3">
-          {SECTIONS.map(({ key, label, badge }) => (
-            <button
-              key={key}
-              onClick={() => setSelectedDue(key)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                selectedDue === key
-                  ? badge + " shadow-sm"
-                  : "bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* テキスト入力 */}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing) addTodo();
-            }}
-            placeholder="新しいタスクを入力..."
-            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-100 text-slate-700 placeholder-slate-300 text-sm focus:outline-none focus:border-violet-300 focus:bg-white transition"
-          />
-          <button
-            onClick={addTodo}
-            disabled={!inputValue.trim()}
-            className="px-5 py-2.5 rounded-xl bg-violet-400 text-white text-sm font-medium hover:bg-violet-500 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-sm shadow-violet-200"
-          >
-            追加
-          </button>
-        </div>
-      </div>
-
-      {/* セクション一覧 */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="w-full max-w-lg space-y-8">
-          {SECTIONS.map(({ key, label, accent, dot }) => {
-            const sectionTodos = todos.filter((t) => t.dueDate === key);
-            const sectionActive = sectionTodos.filter(
-              (t) => !t.completed
-            ).length;
-
-            return (
-              <section key={key}>
-                {/* セクションヘッダー */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`w-2 h-2 rounded-full ${dot}`} />
-                  <span className={`text-xs font-bold tracking-widest uppercase ${accent}`}>
-                    {label}
-                  </span>
-                  <div className="flex-1 h-px bg-white/80" />
-                  {sectionTodos.length > 0 && (
-                    <span className="text-xs text-slate-300">
-                      {sectionActive}/{sectionTodos.length}
-                    </span>
-                  )}
-                </div>
-
-                {sectionTodos.length === 0 ? (
-                  <p className="text-center text-slate-300 text-sm py-3">
-                    タスクなし
-                  </p>
-                ) : (
-                  <SortableContext
-                    items={sectionTodos.map((t) => t.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <div className="space-y-2">
-                      {sectionTodos.map((todo) => (
-                        <SortableTaskItem
-                          key={todo.id}
-                          todo={todo}
-                          onToggle={() => toggleTodo(todo.id)}
-                          onDelete={() => deleteTodo(todo.id)}
-                          onEdit={(text) => editTodo(todo.id, text)}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                )}
-              </section>
-            );
-          })}
-        </div>
-      </DndContext>
-
-      {/* 空状態 */}
-      {todos.length === 0 && (
-        <div className="mt-20 text-center text-slate-300">
-          <div className="text-5xl mb-4">✓</div>
-          <p className="text-sm">タスクを追加して今日を整理しよう</p>
+      {!lineReady && (
+        <div className="mb-8 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          LINE 連携が未設定です。<code className="mx-1">.env.local</code>
+          に LINE_CHANNEL_SECRET と LINE_CHANNEL_ACCESS_TOKEN を設定すると、
+          新規案件の通知とスタッフの受諾・完了報告が LINE 上で回るようになります。
+          手順は <code className="mx-1">docs/LINE_SETUP.md</code> にあります。
         </div>
       )}
+
+      <section className="mb-8">
+        <h2 className="text-lg font-bold text-slate-700 mb-3">今すぐ手を打つもの</h2>
+        <div className="space-y-3">
+          {attention.length === 0 && (
+            <p className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
+              期限超過・至急の案件はありません。
+            </p>
+          )}
+          {attention.map((job) => (
+            <JobLine key={job.id} job={job} today={today} assignee={nameOf(job.assigneeId)} />
+          ))}
+        </div>
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/intake"
+          className="rounded-full bg-violet-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-violet-600"
+        >
+          依頼メールを取り込む
+        </Link>
+        <Link
+          href="/board"
+          className="rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm text-slate-500 hover:border-violet-300 hover:text-violet-600"
+        >
+          案件ボードを開く
+        </Link>
+      </div>
     </main>
   );
 }

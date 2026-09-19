@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ToDo",
-  description: "シンプルなToDo管理アプリ",
+  title: "清掃予約管理",
+  description: "原状回復清掃の依頼受付・配車・進捗管理",
 };
 
 export default function RootLayout({
