@@ -3,6 +3,7 @@
 
 一番怖いのは、列を1つずらして読んだまま「それらしい」予定が丸ごと登録されること。
 画像に書いてある曜日と、日付から計算した曜日を突き合わせれば、ズレは必ずここで止まる。
+表に休み日数の集計列があるなら expected_off_days に入れておく。二重の検算になる。
 
 usage: python3 validate_shifts.py /tmp/claude-shifts.json
 """
@@ -19,42 +20,24 @@ WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
 REST_CELLS = ("休", "公休", "有休", "有給", "振休", "代休")
 
 
-def main(path):
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        sys.exit(f"ファイルがありません: {path}")
-    except json.JSONDecodeError as e:
-        sys.exit(f"JSONとして読めません: {e}")
-
-    errors = []
-    for key in ("year", "month", "person", "days"):
-        if key not in data:
-            errors.append(f"必須項目 '{key}' がありません")
-    if errors:
-        report(errors, [])
-        return 1
-
-    year, month = int(data["year"]), int(data["month"])
-    days = data["days"]
+def check_person(name, days, year, month, expected_off):
+    """1人ぶんを検算し、(エラー行, サマリ行) を返す。"""
+    errors, summary = [], []
     last_day = calendar.monthrange(year, month)[1]
-
     seen = {}
+
     for i, entry in enumerate(days):
-        label = f"days[{i}]"
         try:
             d = date.fromisoformat(entry["date"])
         except (KeyError, ValueError):
-            errors.append(f"{label}: date が正しい YYYY-MM-DD ではありません: {entry.get('date')!r}")
+            errors.append(f"{name} days[{i}]: date が YYYY-MM-DD ではありません: {entry.get('date')!r}")
             continue
 
-        label = f"{d.isoformat()}"
+        label = f"{name} {d.isoformat()}"
 
         if (d.year, d.month) != (year, month):
             errors.append(f"{label}: {year}年{month}月の範囲外です")
             continue
-
         if d.day in seen:
             errors.append(f"{label}: 同じ日が2回出てきます（前半・後半の画像が重複している可能性）")
             continue
@@ -66,9 +49,7 @@ def main(path):
         if not written:
             errors.append(f"{label}: weekday がありません（画像に書かれた曜日を写してください）")
         elif written != actual:
-            errors.append(
-                f"{label}: 曜日が合いません — 画像では「{written}」ですが実際は「{actual}」です"
-            )
+            errors.append(f"{label}: 曜日が合いません — 画像では「{written}」ですが実際は「{actual}」です")
 
         action = entry.get("action")
         if action not in ("work", "off"):
@@ -79,47 +60,79 @@ def main(path):
         if action == "work" and not cell:
             errors.append(f"{label}: action が work なのに cell が空です")
         if action == "off" and cell and cell not in REST_CELLS:
-            errors.append(
-                f"{label}: cell に「{cell}」が入っているのに off です。勤務日の読み落としではありませんか"
-            )
+            errors.append(f"{label}: cell に「{cell}」が入っているのに off です。勤務日の読み落としではありませんか")
 
     missing = [n for n in range(1, last_day + 1) if n not in seen]
     if missing:
         errors.append(
-            f"{year}年{month}月の {', '.join(f'{n}日' for n in missing)} がJSONにありません"
+            f"{name}: {year}年{month}月の {', '.join(f'{n}日' for n in missing)} がJSONにありません"
             "（画像の撮り漏れか、読み飛ばしです）"
         )
 
     work = [e for e in days if e.get("action") == "work"]
     off = [e for e in days if e.get("action") == "off"]
-    summary = [
-        f"対象: {data['person']}さん / {year}年{month}月",
-        f"勤務日: {len(work)}件",
-    ]
-    for cell, n in Counter((e.get("cell") or "").strip() for e in work).most_common():
-        summary.append(f"  {cell}: {n}件")
-    marked = sum(1 for e in off if (e.get("cell") or "").strip())
-    summary.append(
-        f"休み: {len(off)}件（表に「休」等の記載 {marked}件、グレー・空欄 {len(off) - marked}件）"
+    summary.append(f"{name}: 勤務 {len(work)}件 / 休み {len(off)}件")
+    breakdown = ", ".join(
+        f"{cell} {n}" for cell, n in Counter((e.get("cell") or "").strip() for e in work).most_common()
     )
-    summary.append(f"作成する予定の合計: {len(work) + len(off)}件")
+    if breakdown:
+        summary.append(f"  {breakdown}")
 
-    # ズレの検出は「どこから」が分かると直しやすい
-    weekday_errors = [e for e in errors if "曜日が合いません" in e]
-    if len(weekday_errors) > 2:
-        summary.append("")
-        summary.append(
-            f"曜日の不一致が {len(weekday_errors)}件 連続しています。"
-            f"列を1つずらして読んでいる可能性が高いので、{weekday_errors[0].split(':')[0]} のあたりから読み直してください。"
+    # 表の集計列との突き合わせ。曜日チェックを通っても、セルの読み違いはこれで拾える。
+    if expected_off is not None and len(off) != expected_off:
+        errors.append(
+            f"{name}: 休みが {len(off)}件ですが、表の集計は {expected_off}日です。"
+            "勤務日と休みをどこかで取り違えています"
         )
 
-    report(errors, summary)
-    return 1 if errors else 0
+    weekday_errors = [e for e in errors if "曜日が合いません" in e]
+    if len(weekday_errors) > 2:
+        first = weekday_errors[0].split(":")[0]
+        summary.append(
+            f"  → 曜日の不一致が {len(weekday_errors)}件 連続。列を1つずらして読んでいる可能性が高いので、"
+            f"{first} のあたりから読み直してください"
+        )
+
+    return errors, summary
 
 
-def report(errors, summary):
-    for line in summary:
-        print(line)
+def main(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        sys.exit(f"ファイルがありません: {path}")
+    except json.JSONDecodeError as e:
+        sys.exit(f"JSONとして読めません: {e}")
+
+    if "year" not in data or "month" not in data:
+        sys.exit("必須項目 'year' / 'month' がありません")
+    year, month = int(data["year"]), int(data["month"])
+
+    # 1人ぶん（person + days）でも、全員ぶん（people）でも受け取れる。
+    if "people" in data:
+        roster = data["people"]
+    elif "days" in data:
+        roster = [{"name": data.get("person", "対象者"),
+                   "days": data["days"],
+                   "expected_off_days": data.get("expected_off_days")}]
+    else:
+        sys.exit("'people' も 'days' もありません")
+
+    print(f"{year}年{month}月")
+    errors, total_work, total_off = [], 0, 0
+    for p in roster:
+        e, s = check_person(p.get("name", "?"), p.get("days", []), year, month,
+                            p.get("expected_off_days"))
+        errors += e
+        for line in s:
+            print(line)
+        total_work += sum(1 for d in p.get("days", []) if d.get("action") == "work")
+        total_off += sum(1 for d in p.get("days", []) if d.get("action") == "off")
+
+    print()
+    print(f"合計: 勤務 {total_work}件 / 休み {total_off}件")
+
     if errors:
         print()
         print(f"--- エラー {len(errors)}件 ---")
@@ -127,9 +140,11 @@ def report(errors, summary):
             print(f"  ✗ {e}")
         print()
         print("読み取りミスです。画像を見直してJSONを直してから、もう一度実行してください。")
-    else:
-        print()
-        print("✓ 検算OK。ユーザーに内容を確認してもらってからカレンダーに登録してください。")
+        return 1
+
+    print()
+    print("✓ 検算OK。ユーザーに内容を確認してもらってからカレンダーに登録してください。")
+    return 0
 
 
 if __name__ == "__main__":
