@@ -15,6 +15,9 @@ from datetime import date
 
 WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
 
+# 表にこう書かれていれば休み。空欄・グレーも休みだが、そちらは cell が空文字になる。
+REST_CELLS = ("休", "公休", "有休", "有給", "振休", "代休")
+
 
 def main(path):
     try:
@@ -68,16 +71,16 @@ def main(path):
             )
 
         action = entry.get("action")
-        if action not in ("create", "skip"):
-            errors.append(f"{label}: action は 'create' か 'skip' です（現在: {action!r}）")
+        if action not in ("work", "off"):
+            errors.append(f"{label}: action は 'work' か 'off' です（現在: {action!r}）")
             continue
 
         cell = (entry.get("cell") or "").strip()
-        if action == "create" and not cell:
-            errors.append(f"{label}: action が create なのに cell が空です")
-        if action == "skip" and cell and cell not in ("休", "公休", "有休"):
+        if action == "work" and not cell:
+            errors.append(f"{label}: action が work なのに cell が空です")
+        if action == "off" and cell and cell not in REST_CELLS:
             errors.append(
-                f"{label}: cell に「{cell}」が入っているのに skip です。登録漏れではありませんか"
+                f"{label}: cell に「{cell}」が入っているのに off です。勤務日の読み落としではありませんか"
             )
 
     missing = [n for n in range(1, last_day + 1) if n not in seen]
@@ -87,16 +90,19 @@ def main(path):
             "（画像の撮り漏れか、読み飛ばしです）"
         )
 
-    creates = [e for e in days if e.get("action") == "create"]
-    skips = [e for e in days if e.get("action") == "skip"]
+    work = [e for e in days if e.get("action") == "work"]
+    off = [e for e in days if e.get("action") == "off"]
     summary = [
         f"対象: {data['person']}さん / {year}年{month}月",
-        f"登録する日: {len(creates)}件",
+        f"勤務日: {len(work)}件",
     ]
-    for cell, n in Counter((e.get("cell") or "").strip() for e in creates).most_common():
+    for cell, n in Counter((e.get("cell") or "").strip() for e in work).most_common():
         summary.append(f"  {cell}: {n}件")
-    rests = sum(1 for e in skips if (e.get("cell") or "").strip())
-    summary.append(f"登録しない日: {len(skips)}件（うち休み {rests}件、空欄 {len(skips) - rests}件）")
+    marked = sum(1 for e in off if (e.get("cell") or "").strip())
+    summary.append(
+        f"休み: {len(off)}件（表に「休」等の記載 {marked}件、グレー・空欄 {len(off) - marked}件）"
+    )
+    summary.append(f"作成する予定の合計: {len(work) + len(off)}件")
 
     # ズレの検出は「どこから」が分かると直しやすい
     weekday_errors = [e for e in errors if "曜日が合いません" in e]
