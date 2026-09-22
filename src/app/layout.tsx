@@ -12,7 +12,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ja">
+    // Gyazo などのブラウザ拡張が <html> に属性を足すため、
+    // この要素だけ hydration の不一致を警告しない。配下の要素には影響しない。
+    <html lang="ja" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );
