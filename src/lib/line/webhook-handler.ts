@@ -61,7 +61,12 @@ async function handleText(event: LineEvent, body: string): Promise<void> {
 
   const staffMatch = message.match(REGISTER_STAFF);
   if (staffMatch) {
-    const staff = await upsertStaff({ name: staffMatch[1].trim(), lineUserId: userId });
+    // role を明示しないと、依頼元になった人をスタッフに戻せない。
+    const staff = await upsertStaff({
+      name: staffMatch[1].trim(),
+      lineUserId: userId,
+      role: "staff",
+    });
     await reply(replyToken, [
       text(`${staff.name} さんをスタッフとして登録しました。\n「一覧」で未完了の案件を確認できます。`),
     ]);
@@ -101,7 +106,16 @@ async function handleClientMessage(
 ): Promise<void> {
   if (!/号室|部屋|室/.test(message)) {
     await reply(replyToken, [
-      text("ご依頼は、部屋番号と時期・清掃内容を含めて送信してください。\n例）231・233号室\n【時期】9月中\n【清掃内容】通常清掃"),
+      text(
+        [
+          `【依頼元: ${sender.clientName || sender.name}】として登録されています。`,
+          "",
+          "ご依頼は、部屋番号と時期・清掃内容を含めて送信してください。",
+          "例）231・233号室",
+          "【時期】9月中",
+          "【清掃内容】通常清掃",
+        ].join("\n"),
+      ),
     ]);
     return;
   }
@@ -164,7 +178,32 @@ async function handleStaffCommand(
     await replyJobs(replyToken, jobs, "担当の案件はありません。", "担当の案件");
     return;
   }
-  await reply(replyToken, [text(HELP_TEXT)]);
+  // 依頼文らしきものをスタッフが送ってきたら、登録の行き違いを疑って案内する。
+  if (looksLikeRequest(message)) {
+    await reply(replyToken, [
+      text(
+        [
+          `この LINE アカウントは【スタッフ: ${sender.name}】として登録されています。`,
+          "スタッフからの送信は依頼として受け付けません。",
+          "",
+          "依頼元としてお使いになる場合は、次を送って切り替えてください。",
+          "　依頼元登録 会社名",
+          "",
+          "スタッフに戻すときは「スタッフ登録 お名前」を送ります。",
+        ].join("\n"),
+      ),
+    ]);
+    return;
+  }
+
+  await reply(replyToken, [
+    text(`【スタッフ: ${sender.name}】として登録されています。\n\n${HELP_TEXT}`),
+  ]);
+}
+
+/** 部屋番号を含む、ある程度の長さの本文を依頼文とみなす。 */
+function looksLikeRequest(message: string): boolean {
+  return /号室/.test(message) && message.length >= 10;
 }
 
 async function replyJobs(
