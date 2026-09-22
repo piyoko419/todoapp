@@ -24,6 +24,27 @@ export type Staff = {
   createdAt: string;
 };
 
+/** 清掃内容ごとの定額単価（税抜）。 */
+export type Rate = {
+  workType: string;
+  unitPrice: number;
+};
+
+/** 完了時に確定させた明細の1行。単価表を後から変えても過去の請求は動かない。 */
+export type BilledItem = {
+  workType: string;
+  unitPrice: number;
+};
+
+export type Settings = {
+  /** 消費税率。0.1 = 10%。 */
+  taxRate: number;
+  /** 消費税の端数処理。 */
+  rounding: "floor" | "round" | "ceil";
+  /** 請求書に出す自社名。 */
+  companyName: string;
+};
+
 export type JobEvent = {
   at: string;
   /** 誰が起こした変化か。LINE 経由なら staff:<id>、Web 画面なら web。 */
@@ -50,6 +71,14 @@ export type Job = {
   scheduledDate: string | null;
   status: JobStatus;
   assigneeId: string | null;
+  /** 完了した日（YYYY-MM-DD）。月締めの集計キーになる。 */
+  completedAt: string | null;
+  /** 完了時に単価表から写し取った明細。以後、単価表の変更に影響されない。 */
+  billedItems: BilledItem[];
+  /** 請求額（税抜）。完了時に確定し、画面から手直しできる。 */
+  amount: number | null;
+  /** 請求済みにした日時。null なら未請求。 */
+  invoicedAt: string | null;
   notes: string;
   source: JobSource;
   /** 同じメールから作られた案件をまとめる ID。 */
@@ -62,6 +91,8 @@ export type Job = {
 export type Database = {
   jobs: Job[];
   staff: Staff[];
+  rates: Rate[];
+  settings: Settings;
   /** 取り込んだ依頼メールの原文。あとから見返すため。 */
   intakes: {
     id: string;
@@ -77,6 +108,25 @@ export const URGENCY_LABEL: Record<Urgency, string> = {
   high: "早め",
   normal: "通常",
   low: "余裕あり",
+};
+
+/** 依頼メールから拾える清掃内容。単価表の初期行になる。 */
+export const DEFAULT_WORK_TYPES = [
+  "通常清掃",
+  "剥離",
+  "ワックス",
+  "原状回復",
+  "エアコン",
+  "水回り",
+  "窓・サッシ",
+  "ベランダ",
+  "ハウスクリーニング",
+];
+
+export const DEFAULT_SETTINGS: Settings = {
+  taxRate: 0.1,
+  rounding: "floor",
+  companyName: "",
 };
 
 export const STATUS_LABEL: Record<JobStatus, string> = {

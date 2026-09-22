@@ -1,11 +1,29 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { Database } from "./types";
+import { DEFAULT_SETTINGS, DEFAULT_WORK_TYPES, Database, Job } from "./types";
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "db.json");
 
-const EMPTY: Database = { jobs: [], staff: [], intakes: [] };
+const EMPTY: Database = {
+  jobs: [],
+  staff: [],
+  intakes: [],
+  // 単価は 0 で用意しておき、画面で金額を入れてもらう。
+  rates: DEFAULT_WORK_TYPES.map((workType) => ({ workType, unitPrice: 0 })),
+  settings: { ...DEFAULT_SETTINGS },
+};
+
+/** 請求フィールドを持たない古い案件に既定値を補う。 */
+function migrateJob(job: Job): Job {
+  return {
+    ...job,
+    completedAt: job.completedAt ?? null,
+    billedItems: job.billedItems ?? [],
+    amount: job.amount ?? null,
+    invoicedAt: job.invoicedAt ?? null,
+  };
+}
 
 let cache: Database | null = null;
 /** 書き込みを直列化するためのチェーン。同時リクエストでの読み書き競合を防ぐ。 */
@@ -16,7 +34,13 @@ async function load(): Promise<Database> {
   try {
     const raw = await fs.readFile(DB_PATH, "utf8");
     const parsed = JSON.parse(raw) as Partial<Database>;
-    cache = { ...EMPTY, ...parsed };
+    // 途中でフィールドが増えても、古い db.json をそのまま読めるようにする。
+    cache = {
+      ...structuredClone(EMPTY),
+      ...parsed,
+      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings ?? {}) },
+      jobs: (parsed.jobs ?? []).map(migrateJob),
+    };
   } catch {
     cache = structuredClone(EMPTY);
   }

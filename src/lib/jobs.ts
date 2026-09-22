@@ -1,7 +1,9 @@
 import { newId } from "./id";
 import { ParsedJob, ParseResult } from "./parser";
 import { read, write } from "./store";
-import { Job, JobSource, JobStatus, Staff, isOpen, urgencyRank } from "./types";
+import { Job, JobSource, JobStatus, Rate, Settings, Staff, isOpen, urgencyRank } from "./types";
+import { priceFor } from "./billing";
+import { toISODate } from "./date";
 
 /** 状態遷移の許可表。ここに無い遷移は拒否する。 */
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
@@ -46,6 +48,10 @@ function buildJob(input: NewJobInput): Job {
     notes: input.notes,
     source: input.source,
     batchId: input.batchId ?? null,
+    completedAt: null,
+    billedItems: [],
+    amount: null,
+    invoicedAt: null,
     createdAt: now,
     updatedAt: now,
     history: [{ at: now, actor: "system", text: "案件を登録しました" }],
@@ -133,6 +139,9 @@ export type JobPatch = {
   notes?: string;
   workTypes?: string[];
   dueDate?: string | null;
+  /** 請求額（税抜）の手直し。 */
+  amount?: number | null;
+  completedAt?: string | null;
 };
 
 /** 案件を更新する。禁止された状態遷移は Error にする。 */
@@ -152,6 +161,17 @@ export async function updateJob(
       const from = job.status;
       job.status = patch.status;
       touch(job, actor, `状態を ${from} → ${patch.status} に変更`);
+
+      if (patch.status === "done") {
+        // 完了した時点の単価を写し取る。以後、単価表を変えても請求額は動かない。
+        job.completedAt ??= toISODate(new Date());
+        if (job.amount === null) {
+          const { items, amount } = priceFor(job.workTypes, db.rates);
+          job.billedItems = items;
+          job.amount = amount;
+          touch(job, actor, `請求額を ${amount} 円（税抜）で確定`);
+        }
+      }
     }
     if (patch.assigneeId !== undefined && patch.assigneeId !== job.assigneeId) {
       job.assigneeId = patch.assigneeId;
@@ -169,6 +189,12 @@ export async function updateJob(
       touch(job, actor, `実施予定日を ${patch.scheduledDate ?? "未定"} に変更`);
     }
     if (patch.dueDate !== undefined) job.dueDate = patch.dueDate;
+    if (patch.completedAt !== undefined) job.completedAt = patch.completedAt;
+    if (patch.amount !== undefined && patch.amount !== job.amount) {
+      const before = job.amount;
+      job.amount = patch.amount;
+      touch(job, actor, `請求額を ${before ?? "未設定"} → ${patch.amount ?? "未設定"} 円に変更`);
+    }
     if (patch.notes !== undefined) job.notes = patch.notes;
     if (patch.workTypes !== undefined) job.workTypes = patch.workTypes;
     job.updatedAt = new Date().toISOString();
@@ -220,5 +246,53 @@ export async function deleteStaff(id: string): Promise<void> {
     for (const job of db.jobs) {
       if (job.assigneeId === id) job.assigneeId = null;
     }
+  });
+}
+
+export async function listRates(): Promise<Rate[]> {
+  return read((db) => [...db.rates]);
+}
+
+/** 単価表をまるごと置き換える。すでに完了した案件の請求額には影響しない。 */
+export async function saveRates(rates: Rate[]): Promise<Rate[]> {
+  return write((db) => {
+    db.rates = rates
+      .filter((rate) => rate.workType.trim().length > 0)
+      .map((rate) => ({
+        workType: rate.workType.trim(),
+        unitPrice: Math.max(0, Math.round(rate.unitPrice) || 0),
+      }));
+    return db.rates;
+  });
+}
+
+export async function getSettings(): Promise<Settings> {
+  return read((db) => ({ ...db.settings }));
+}
+
+export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+  return write((db) => {
+    db.settings = { ...db.settings, ...patch };
+    return { ...db.settings };
+  });
+}
+
+/** 指定した案件をまとめて請求済みにする。すでに請求済みのものは変えない。 */
+export async function markInvoiced(
+  jobIds: string[],
+  invoiced: boolean,
+): Promise<number> {
+  return write((db) => {
+    const stamp = new Date().toISOString();
+    let changed = 0;
+    for (const job of db.jobs) {
+      if (!jobIds.includes(job.id)) continue;
+      const next = invoiced ? stamp : null;
+      if ((job.invoicedAt === null) === (next === null)) continue;
+      job.invoicedAt = next;
+      touch(job, "web", invoiced ? "請求済みにしました" : "未請求に戻しました");
+      changed += 1;
+    }
+    return changed;
   });
 }
