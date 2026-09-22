@@ -73,6 +73,15 @@ ngrok version
 > Node.js 20 以上をお使いの場合も動きます。`bun install` → `npm install`、
 > `bun run dev` → `npm run dev` と読み替えてください。
 
+### 固定ドメイン（dev domain）を確認する
+
+ngrok のダッシュボード左メニュー **Domains** を開くと、無料アカウントにも
+`〇〇-〇〇-〇〇.ngrok-free.dev` という**固定ドメインが 1 つ**割り当てられています
+（`Your dev domain` と表示されているもの）。これを控えておいてください。
+
+固定ドメインを使うと **URL が毎回変わらない**ので、Webhook の登録が一度で済みます。
+以降の手順ではこれを `<固定ドメイン>` と書きます。
+
 ## 1. リポジトリを手元に取得する
 
 ```bash
@@ -118,34 +127,51 @@ bun run dev
 **ダッシュボードに「LINE 連携が未設定です」の警告が出ていなければ、環境変数は正しく読めています。**
 出ている場合は `.env.local` のファイル名・置き場所を確認し、`bun run dev` を再起動してください。
 
-## 4. ngrok で一時的に公開する
+## 4. ngrok で公開する（ターミナル②）
 
 `bun run dev` は動かしたまま、**別のターミナル**を開いて実行します。
+固定ドメインを指定するのが肝心です。
+
+```bash
+ngrok http --url=https://<固定ドメイン>.ngrok-free.dev 3000
+```
+
+`Forwarding` の行に指定したドメインが出れば成功です。
+
+```
+Forwarding  https://<固定ドメイン>.ngrok-free.dev -> http://localhost:3000
+```
+
+`--url` が「unknown flag」と言われる場合は、古い書き方の `--domain=` を使ってください。
+
+<details>
+<summary>固定ドメインを使わない場合</summary>
 
 ```bash
 ngrok http 3000
 ```
 
-`Forwarding` の行に出る `https://` から始まる URL を使います。
-
-```
-Forwarding  https://xxxx-xx-xx-xx-xx.ngrok-free.app -> http://localhost:3000
-```
+ランダムな URL が払い出されます。この場合は**起動するたびに URL が変わる**ので、
+毎回手順 5 をやり直す必要があります。
+</details>
 
 ## 5. Webhook URL を LINE に登録する
 
 **コマンドで登録できます。**管理画面に貼り付ける必要はありません。
-さらに 3 つ目のターミナルを開き、ngrok が出した URL を渡します。
+3 つ目のターミナルを開き、固定ドメインを渡します。
 
 ```bash
-bun run line:webhook https://xxxx-xx-xx-xx-xx.ngrok-free.app
+bun run line:webhook https://<固定ドメイン>.ngrok-free.dev
 ```
+
+**固定ドメインを使っている場合、この登録は一度だけです。**
+次回以降は手順 3（`bun run dev`）と手順 4（`ngrok`）を起動するだけで LINE から届きます。
 
 `/api/line/webhook` は自動で付きます。登録のあと疎通テストまで走るので、
 
 ```
 ■ Webhook URL を登録します
-  https://xxxx-xx-xx-xx-xx.ngrok-free.app/api/line/webhook
+  https://<固定ドメイン>.ngrok-free.dev/api/line/webhook
   ✓ 登録しました
 
 ■ 疎通テスト (POST /v2/bot/channel/webhook/test)
@@ -158,7 +184,7 @@ bun run line:webhook https://xxxx-xx-xx-xx-xx.ngrok-free.app
 <summary>手動で登録する場合</summary>
 
 LINE Official Account Manager → **設定 → Messaging API** の「Webhook URL」に
-`https://xxxx-xx-xx-xx-xx.ngrok-free.app/api/line/webhook` を入れて **保存**。
+`https://<固定ドメイン>.ngrok-free.dev/api/line/webhook` を入れて **保存**。
 </details>
 
 ## 6. 応答設定を切り替える
@@ -185,7 +211,7 @@ bun run line:check
   ✓ 応答モード: bot（このアプリが応答します）
 
 ■ Webhook の登録状況 (GET /v2/bot/channel/webhook/endpoint)
-  ✓ 登録済み: https://xxxx-xx-xx-xx-xx.ngrok-free.app/api/line/webhook
+  ✓ 登録済み: https://<固定ドメイン>.ngrok-free.dev/api/line/webhook
   ✓ Webhook は有効です
 ```
 
@@ -212,7 +238,8 @@ bun run line:check
 
 このアプリには**ログイン機能がありません**。ngrok で公開している間は、
 URL を知っている人なら誰でも案件の閲覧・変更ができます。
-ランダムな URL なので現実的なリスクは低いものの、開けっ放しにする意味はありません。
+**固定ドメインは毎回同じ**なので、一度知られると次回も到達できます。
+使っていないときは ngrok を止めておいてください。
 
 ## うまくいかないとき
 
@@ -225,8 +252,8 @@ URL を知っている人なら誰でも案件の閲覧・変更ができます�
 | ngrok に 401 が出ている | チャネルシークレットが一致していない。**再発行した後の貼り替え忘れ**が典型 |
 | 返信が来るが案件カードが届かない | アクセストークンを確認。`bun run dev` のログの `[line]` 行に 401/403 が出ていないか |
 | LINE の定型文が混ざる | 応答設定の「応答メッセージ」をオフに |
-| ngrok の URL が変わった | 無料プランは起動ごとに変わります。手順 5 をやり直してください |
-| Webhook に HTML が返っている | ngrok の警告ページ。`ngrok http 3000` を貼り直すか、ngrok に認証トークンを登録してください |
+| ngrok の URL が変わった | 固定ドメインを指定せずに起動しています。手順 4 の `--url=` を付け直してください |
+| Webhook に HTML が返っている | ngrok の警告ページ。認証トークン（`ngrok config add-authtoken`）が未登録の可能性があります |
 | PC をスリープさせたら届かなくなった | `bun run dev` と `ngrok` が動いている間だけ通知が届きます |
 
 ## 本番運用に移すとき
