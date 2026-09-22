@@ -6,6 +6,42 @@ LINE 公式アカウントをこれから作る前提の手順です。
 
 ---
 
+## 0. まず「どこを見るのか」を押さえる
+
+LINE の管理画面は 2 つあり、役割が分かれています。ここが最初につまずく所です。
+
+| 画面 | URL | 担当 |
+| --- | --- | --- |
+| **LINE Official Account Manager** | <https://manager.line.biz/> | 公式アカウント本体。友だち、あいさつメッセージ、**応答設定**、リッチメニュー |
+| **LINE Developers コンソール** | <https://developers.line.biz/console/> | **Messaging API チャネル**。チャネルシークレット、アクセストークン、Webhook URL |
+
+このアプリが必要とする値（シークレットとアクセストークン）は
+**LINE Developers コンソール側**にあります。
+
+### 公式アカウントを既に持っているか確認する
+
+1. <https://manager.line.biz/> にログイン（LINE アカウントまたは LINE ビジネス ID）。
+2. アカウントの一覧が出れば、その公式アカウントは既にあります。空なら未作成です。
+3. 対象アカウントを開き、右上の **設定** → 左メニューの **Messaging API** を見ます。
+
+| 表示 | 状態 | 次にやること |
+| --- | --- | --- |
+| **「Messaging APIを利用する」**ボタンが出ている | 公式アカウントはあるが API 未連携 | ボタンを押してプロバイダーを選択／作成すると、Messaging API チャネルが自動で作られます |
+| チャネル ID・チャネルシークレットなどが表示されている | **API 連携済み** | 手順 2 へ。同じ画面の **LINE Developers** へのリンクからコンソールに移れます |
+
+### 公式アカウントがまだ無い場合
+
+どちらから作っても、最終的に同じ 1 組（公式アカウント + Messaging API チャネル）になります。
+
+- Official Account Manager でアカウントを作る → 上記の **Messaging API** から有効化
+- または LINE Developers コンソールでプロバイダーを作り、**Messaging API チャネル**を新規作成
+
+無料のコミュニケーションプランで足ります。
+
+> 画面の文言はときどき変わります。最新は公式マニュアルを参照してください。
+> [Messaging APIを始めよう（LINE Developers）](https://developers.line.biz/ja/docs/messaging-api/getting-started/) /
+> [Messaging APIマニュアル（LINEヤフー for Business）](https://www.lycbiz.com/jp/manual/OfficialAccountManager/account-settings_messaging_api/)
+
 ## 1. LINE 公式アカウントと Messaging API チャネルを作る
 
 1. [LINE Official Account Manager](https://manager.line.biz/) でアカウントを作成（無料のコミュニケーションプランで足ります）。
@@ -14,12 +50,16 @@ LINE 公式アカウントをこれから作る前提の手順です。
 
 ## 2. トークンを取得して `.env.local` に書く
 
-LINE Developers のチャネル設定画面から次の 2 つを取得します。
+[LINE Developers コンソール](https://developers.line.biz/console/) で
+**プロバイダー → 対象の Messaging API チャネル**を開き、次の 2 つを取得します。
 
-| 取得場所 | 環境変数 |
-| --- | --- |
-| 「チャネル基本設定」> チャネルシークレット | `LINE_CHANNEL_SECRET` |
-| 「Messaging API設定」> チャネルアクセストークン（長期） | `LINE_CHANNEL_ACCESS_TOKEN` |
+| タブ | 項目 | 環境変数 |
+| --- | --- | --- |
+| チャネル基本設定 | チャネルシークレット | `LINE_CHANNEL_SECRET` |
+| Messaging API設定 | チャネルアクセストークン（長期） → **発行** | `LINE_CHANNEL_ACCESS_TOKEN` |
+
+アクセストークンは初回は空欄で、「発行」を押して発行します。
+発行し直すと古いトークンは無効になるので、貼り替えを忘れないでください。
 
 ```bash
 cp .env.example .env.local
