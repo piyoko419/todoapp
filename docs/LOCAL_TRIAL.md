@@ -7,13 +7,71 @@ LINE 通知が実際に届くところまでを、自分の PC だけで確か�
 
 ---
 
-## 用意するもの
+## 全体像
 
-| 物 | 入手先 | 備考 |
+ターミナル（黒い画面）を **3 枚**使います。1 と 2 は開きっぱなしにします。
+
+| ターミナル | 実行するもの | 役割 |
 | --- | --- | --- |
-| Bun | <https://bun.sh/> | Node.js 20 以上でも動きます（`npm` に読み替え） |
-| Git | <https://git-scm.com/> | Mac は標準で入っています |
-| ngrok アカウント | <https://ngrok.com/> | 無料。サインアップ後に認証トークンの登録が必要 |
+| ① | `bun run dev` | アプリ本体。閉じるとアプリが止まる |
+| ② | `ngrok http 3000` | LINE から届くようにトンネルを開ける。閉じると届かなくなる |
+| ③ | `bun run line:webhook …` / `bun run line:check` | 設定コマンド。使うときだけ |
+
+ターミナルの開き方: **Mac** は「ターミナル」アプリ（`command + スペース` → `ターミナル`）、
+**Windows** は「PowerShell」（スタートメニューで `powershell`）。
+新しいタブは Mac が `command + T`、Windows が `Ctrl + Shift + T` です。
+
+## 0. 道具を入れる
+
+### Mac
+
+```bash
+# Bun（JavaScript の実行環境）
+curl -fsSL https://bun.sh/install | bash
+
+# Git（入っていなければ）
+xcode-select --install
+
+# ngrok
+brew install ngrok
+```
+
+`brew` が無い場合は <https://ngrok.com/download> から zip を落として展開してください。
+
+### Windows（PowerShell）
+
+```powershell
+# Bun
+powershell -c "irm bun.sh/install.ps1 | iex"
+
+# Git と ngrok
+winget install Git.Git
+winget install ngrok.ngrok
+```
+
+`winget` が無い場合は <https://git-scm.com/download/win> と
+<https://ngrok.com/download> から入れてください。
+
+### 共通: ngrok の認証トークンを登録する
+
+<https://dashboard.ngrok.com/signup> で無料登録し、表示される認証トークンを登録します。
+**これをやらないと `ngrok http 3000` が動きません。**
+
+```bash
+ngrok config add-authtoken ここに認証トークン
+```
+
+インストール後は**ターミナルを閉じて開き直す**と、コマンドが認識されます。
+確認:
+
+```bash
+bun --version
+git --version
+ngrok version
+```
+
+> Node.js 20 以上をお使いの場合も動きます。`bun install` → `npm install`、
+> `bun run dev` → `npm run dev` と読み替えてください。
 
 ## 1. リポジトリを手元に取得する
 
