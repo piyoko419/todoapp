@@ -8,7 +8,6 @@ const LINKS = [
   { href: "/intake", label: "メール取り込み" },
   { href: "/board", label: "案件ボード" },
   { href: "/billing", label: "請求" },
-  { href: "/liff", label: "スタッフ画面" },
   { href: "/todo", label: "ToDo" },
 ];
 
