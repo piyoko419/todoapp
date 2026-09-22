@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint src --ext .ts,.tsx",
-    "test": "bun test"
+    "test": "bun test",
+    "line:check": "bun run scripts/line-setup.ts check",
+    "line:webhook": "bun run scripts/line-setup.ts webhook"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

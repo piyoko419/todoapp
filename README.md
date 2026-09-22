@@ -63,6 +63,17 @@ bun run lint
 bun run build
 ```
 
+## LINE の設定コマンド
+
+管理画面を触る手間を減らすため、API で操作できる部分をコマンドにしてあります。
+
+```bash
+bun run line:check                  # トークン・応答モード・Webhook 登録状況を一度に確認
+bun run line:webhook https://<公開URL>   # Webhook URL を登録して疎通テストまで実行
+```
+
+手元での動作確認の手順は [`docs/LOCAL_TRIAL.md`](docs/LOCAL_TRIAL.md) にあります。
+
 ## データの保存先
 
 `data/db.json`（`DATA_DIR` で変更可）に JSON で保存します。単一プロセス前提の簡易ストアです。
