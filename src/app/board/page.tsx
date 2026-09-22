@@ -56,6 +56,27 @@ export default function BoardPage() {
     await load();
   };
 
+  const removeJob = async (job: Job) => {
+    const label = `${job.property} ${job.room}号室`;
+    if (!confirm(`${label} を削除します。元に戻せません。よろしいですか？`)) return;
+    setError(null);
+    const res = await fetch(`/api/jobs/${job.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = (await res.json()) as { error?: string };
+      setError(body.error ?? "削除に失敗しました");
+      return;
+    }
+    await load();
+  };
+
+  const removeStaff = async (member: Staff) => {
+    if (!confirm(`${member.name} さんを削除します。担当していた案件は未割当に戻ります。`)) {
+      return;
+    }
+    await fetch(`/api/staff?id=${member.id}`, { method: "DELETE" });
+    await load();
+  };
+
   const addStaff = async () => {
     if (!newStaffName.trim()) return;
     await fetch("/api/staff", {
@@ -188,6 +209,12 @@ export default function BoardPage() {
                   <span className="text-xs text-slate-400">
                     担当: {staffName(job.assigneeId)}
                   </span>
+                  <button
+                    onClick={() => removeJob(job)}
+                    className="ml-auto rounded-full border border-slate-200 px-3 py-1.5 text-sm text-slate-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500"
+                  >
+                    削除
+                  </button>
                 </div>
               </div>
             </article>
@@ -207,13 +234,20 @@ export default function BoardPage() {
           {staff.map((s) => (
             <span
               key={s.id}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
+              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600"
             >
               {s.name}
-              <span className="ml-2 text-xs text-slate-400">
+              <span className="text-xs text-slate-400">
                 {s.role === "client" ? "依頼元" : s.role === "admin" ? "管理者" : "スタッフ"}
                 {s.lineUserId ? " ・LINE連携済" : ""}
               </span>
+              <button
+                onClick={() => removeStaff(s)}
+                className="text-slate-300 hover:text-rose-500"
+                aria-label={`${s.name}を削除`}
+              >
+                ×
+              </button>
             </span>
           ))}
         </div>

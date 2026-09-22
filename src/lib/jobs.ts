@@ -202,6 +202,27 @@ export async function updateJob(
   });
 }
 
+/**
+ * 案件を完全に削除する。
+ * 請求済みのものは帳簿が合わなくなるので拒否する（先に未請求へ戻してもらう）。
+ */
+export async function deleteJob(id: string): Promise<void> {
+  await write((db) => {
+    const job = db.jobs.find((j) => j.id === id);
+    if (!job) throw new Error(`案件が見つかりません: ${id}`);
+    if (job.invoicedAt) {
+      throw new Error(
+        "請求済みの案件は削除できません。請求画面で「未請求に戻す」を行ってから削除してください。",
+      );
+    }
+    db.jobs = db.jobs.filter((j) => j.id !== id);
+    // 取り込み履歴からも参照を外す。
+    for (const intake of db.intakes) {
+      intake.jobIds = intake.jobIds.filter((jobId) => jobId !== id);
+    }
+  });
+}
+
 export async function listStaff(): Promise<Staff[]> {
   return read((db) => [...db.staff]);
 }

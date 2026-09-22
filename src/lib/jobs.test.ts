@@ -11,6 +11,7 @@ const {
   canTransition,
   compareJobs,
   createJobsFromParse,
+  deleteJob,
   listJobs,
   markInvoiced,
   saveRates,
@@ -250,5 +251,63 @@ describe("saveRates", () => {
       { workType: "通常清掃", unitPrice: 30001 },
       { workType: "剥離", unitPrice: 0 },
     ]);
+  });
+});
+
+describe("deleteJob", () => {
+  const sample = {
+    room: "401",
+    client: "テスト管理",
+    workTypes: ["通常清掃"],
+    urgency: "normal" as const,
+    dueDate: null,
+    dueDateText: "",
+    notes: "",
+    source: "manual" as const,
+  };
+
+  test("案件を消せる", async () => {
+    const job = await addJob(sample);
+    await deleteJob(job.id);
+    expect((await listJobs()).find((j) => j.id === job.id)).toBeUndefined();
+  });
+
+  test("取り込み履歴からも参照を外す", async () => {
+    const email = "○○管理\n501号室\n【清掃内容】501号室→通常清掃";
+    const { created } = await createJobsFromParse(parseRequestEmail(email, NOW), {
+      source: "email",
+      rawText: email,
+    });
+    await deleteJob(created[0].id);
+    const { read } = await import("./store");
+    const intakes = await read((db) => db.intakes);
+    expect(intakes.every((i) => !i.jobIds.includes(created[0].id))).toBe(true);
+  });
+
+  test("請求済みの案件は消せない", async () => {
+    await saveRates([{ workType: "通常清掃", unitPrice: 30000 }]);
+    const job = await addJob(sample);
+    for (const status of ["assigned", "accepted", "in_progress", "done"] as const) {
+      await updateJob(job.id, { status }, "test");
+    }
+    await markInvoiced([job.id], true);
+
+    await expect(deleteJob(job.id)).rejects.toThrow("請求済みの案件は削除できません");
+    expect((await listJobs()).find((j) => j.id === job.id)).toBeDefined();
+  });
+
+  test("未請求に戻せば消せる", async () => {
+    const job = await addJob(sample);
+    for (const status of ["assigned", "accepted", "in_progress", "done"] as const) {
+      await updateJob(job.id, { status }, "test");
+    }
+    await markInvoiced([job.id], true);
+    await markInvoiced([job.id], false);
+    await deleteJob(job.id);
+    expect((await listJobs()).find((j) => j.id === job.id)).toBeUndefined();
+  });
+
+  test("存在しない案件はエラーになる", async () => {
+    await expect(deleteJob("job_nothing")).rejects.toThrow("見つかりません");
   });
 });
