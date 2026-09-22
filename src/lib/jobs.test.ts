@@ -311,3 +311,28 @@ describe("deleteJob", () => {
     await expect(deleteJob("job_nothing")).rejects.toThrow("見つかりません");
   });
 });
+
+describe("保存内容の読み直し", () => {
+  // サーバーコンポーネントと API ルートでモジュールの実体が分かれると、
+  // メモリに持った内容が古いまま返ってしまう。常にファイルを読み直すことで防ぐ。
+  test("ファイルが外から書き換わっても、次の読み取りに反映される", async () => {
+    const job = await addJob({
+      room: "601",
+      client: "テスト管理",
+      workTypes: ["通常清掃"],
+      urgency: "normal",
+      dueDate: null,
+      dueDateText: "",
+      notes: "",
+      source: "manual",
+    });
+
+    const dbPath = path.join(TMP, "db.json");
+    const raw = JSON.parse(await fs.readFile(dbPath, "utf8"));
+    raw.jobs.find((j: { id: string }) => j.id === job.id).room = "999";
+    await fs.writeFile(dbPath, JSON.stringify(raw), "utf8");
+
+    const after = (await listJobs()).find((j) => j.id === job.id);
+    expect(after?.room).toBe("999");
+  });
+});

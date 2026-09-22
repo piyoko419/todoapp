@@ -1,5 +1,7 @@
 import Link from "next/link";
 import AppNav from "@/components/AppNav";
+import MonthCalendar from "@/components/MonthCalendar";
+import { monthKey, withoutDate } from "@/lib/calendar";
 import { toISODate } from "@/lib/date";
 import { listJobs, listStaff } from "@/lib/jobs";
 import { isConfigured } from "@/lib/line/client";
@@ -48,9 +50,22 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
   );
 }
 
-export default async function DashboardPage() {
-  const [jobs, staff] = await Promise.all([listJobs(), listStaff()]);
-  const today = toISODate(new Date());
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string }>;
+}) {
+  const [jobs, staff, params] = await Promise.all([
+    listJobs(),
+    listStaff(),
+    searchParams,
+  ]);
+  const now = new Date();
+  const today = toISODate(now);
+  // ?month=2026-10 で月を切り替える。不正な値は今月に落とす。
+  const month = /^\d{4}-\d{2}$/.test(params.month ?? "")
+    ? (params.month as string)
+    : monthKey(now);
   const open = jobs.filter(isOpen);
   const overdue = open.filter((job) => job.dueDate !== null && job.dueDate < today);
   const urgent = open.filter((job) => job.urgency === "urgent");
@@ -59,6 +74,7 @@ export default async function DashboardPage() {
 
   const nameOf = (id: string | null) => staff.find((s) => s.id === id)?.name ?? "未割当";
   const attention = [...overdue, ...urgent.filter((job) => !overdue.includes(job))].slice(0, 8);
+  const undated = withoutDate(open);
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-10">
@@ -81,6 +97,17 @@ export default async function DashboardPage() {
           手順は <code className="mx-1">docs/LINE_SETUP.md</code> にあります。
         </div>
       )}
+
+      <div className="mb-8">
+        <MonthCalendar jobs={open} month={month} today={today} />
+        {undated.length > 0 && (
+          <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            実施予定日も期限も入っていない案件が {undated.length} 件あります（
+            {undated.map((job) => `${job.room}号室`).join("・")}）。
+            カレンダーには出ないので、案件ボードで日付を入れてください。
+          </p>
+        )}
+      </div>
 
       <section className="mb-8">
         <h2 className="text-lg font-bold text-slate-700 mb-3">今すぐ手を打つもの</h2>
