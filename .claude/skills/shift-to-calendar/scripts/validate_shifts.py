@@ -17,7 +17,10 @@ from datetime import date
 WEEKDAYS = ["月", "火", "水", "木", "金", "土", "日"]
 
 # 表にこう書かれていれば休み。空欄・グレーも休みだが、そちらは cell が空文字になる。
-REST_CELLS = ("休", "公休", "有休", "有給", "振休", "代休")
+REST_CELLS = ("休", "公休", "振休", "代休")
+
+# 有給は休みだが、シート右端の休み日数カウントには含まれない扱いなので分けて数える。
+LEAVE_CELLS = ("有", "有休", "有給")
 
 
 def check_person(name, days, year, month, expected_off):
@@ -59,7 +62,7 @@ def check_person(name, days, year, month, expected_off):
         cell = (entry.get("cell") or "").strip()
         if action == "work" and not cell:
             errors.append(f"{label}: action が work なのに cell が空です")
-        if action == "off" and cell and cell not in REST_CELLS:
+        if action == "off" and cell and cell not in REST_CELLS + LEAVE_CELLS:
             errors.append(f"{label}: cell に「{cell}」が入っているのに off です。勤務日の読み落としではありませんか")
 
     missing = [n for n in range(1, last_day + 1) if n not in seen]
@@ -71,7 +74,12 @@ def check_person(name, days, year, month, expected_off):
 
     work = [e for e in days if e.get("action") == "work"]
     off = [e for e in days if e.get("action") == "off"]
-    summary.append(f"{name}: 勤務 {len(work)}件 / 休み {len(off)}件")
+    leave = [e for e in off if (e.get("cell") or "").strip() in LEAVE_CELLS]
+    counted_off = [e for e in off if e not in leave]
+    summary.append(
+        f"{name}: 勤務 {len(work)}件 / 休み {len(counted_off)}件"
+        + (f" / 有給 {len(leave)}件" if leave else "")
+    )
     breakdown = ", ".join(
         f"{cell} {n}" for cell, n in Counter((e.get("cell") or "").strip() for e in work).most_common()
     )
@@ -79,9 +87,9 @@ def check_person(name, days, year, month, expected_off):
         summary.append(f"  {breakdown}")
 
     # 表の集計列との突き合わせ。曜日チェックを通っても、セルの読み違いはこれで拾える。
-    if expected_off is not None and len(off) != expected_off:
+    if expected_off is not None and len(counted_off) != expected_off:
         errors.append(
-            f"{name}: 休みが {len(off)}件ですが、表の集計は {expected_off}日です。"
+            f"{name}: 休みが {len(counted_off)}件ですが、表の集計は {expected_off}日です。"
             "勤務日と休みをどこかで取り違えています"
         )
 
